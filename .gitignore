@@ -19,12 +19,15 @@ env/
 .pytest_cache/
 tests/
 test.py
+pre_deploy_test.py
+
 
 # Temp / runtime files
 temp/
 logs/
 info/
-
+templates/
+test/
 # Local Firestore emulator
 .local_firestore/
 
@@ -39,4 +42,4 @@ info/
 .DS_Store
 Thumbs.db
 
-.pdf
+*.pdf
