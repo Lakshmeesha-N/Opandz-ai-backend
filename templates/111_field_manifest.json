@@ -1,0 +1,24 @@
+{
+    "required_fields": [
+        {
+            "field": "case_study_industry",
+            "description": "The specific industry or sector being analyzed in the operational synergy example (e.g., healthcare, finance, retail)."
+        },
+        {
+            "field": "case_study_data_type",
+            "description": "The specific type of historical data being analyzed by the data scientist (e.g., medical charts, transaction logs, sensor readings)."
+        },
+        {
+            "field": "case_study_objective",
+            "description": "The specific goal or risk factor being identified by the data science process (e.g., patient readmission, credit default, equipment failure)."
+        },
+        {
+            "field": "case_study_application",
+            "description": "The specific software or system environment where the AI model is deployed (e.g., hospital software, banking portal, manufacturing dashboard)."
+        },
+        {
+            "field": "case_study_stakeholder",
+            "description": "The end-user or personnel notified by the AI system (e.g., on-duty staff, loan officers, maintenance technicians)."
+        }
+    ]
+}

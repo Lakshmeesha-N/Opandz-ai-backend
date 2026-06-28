@@ -1,0 +1,288 @@
+﻿# =============================================================================
+# cloudbuild.yaml — Opandz Legal AI Backend
+# =============================================================================
+#
+# Strategy: BUILD ONCE → DEPLOY EVERYWHERE
+# ─────────────────────────────────────────
+# A single Docker image is built and pushed to Artifact Registry.
+# All four Cloud Run services are then deployed from the EXACT same image
+# digest, guaranteeing that the Web API and every Worker are always in sync.
+#
+# Services deployed:
+#   1. backend-api            → uvicorn (FastAPI web server)
+#   2. setup-worker           → python -m src.workers.setup_worker
+#   3. intake-worker          → python -m src.workers.intake_worker
+#   4. document-edit-worker   → python -m src.workers.document_edit_worker
+#
+# =============================================================================
+# HOW TO TRIGGER
+# =============================================================================
+#
+# Manual one-off deploy:
+#   gcloud builds submit . \
+#     --config cloudbuild.yaml \
+#     --project=YOUR_PROJECT_ID
+#
+# Override any substitution at submit time:
+#   gcloud builds submit . \
+#     --config cloudbuild.yaml \
+#     --substitutions _REGION=asia-south2,_REPOSITORY=opandz
+#
+# Automated trigger (GitHub push to main):
+#   gcloud builds triggers create github \
+#     --repo-name=YOUR_REPO_NAME \
+#     --repo-owner=YOUR_GITHUB_ORG \
+#     --branch-pattern="^main$" \
+#     --build-config=cloudbuild.yaml \
+#     --project=YOUR_PROJECT_ID
+#
+# =============================================================================
+# SUBSTITUTION VARIABLES  (override at trigger time, never hardcode here)
+# =============================================================================
+
+substitutions:
+
+  # GCP Project & Location
+  _REGION:         "asia-south2"
+  _REPOSITORY:     "opandz"
+
+  # Image
+  _IMAGE_NAME:     "opandz-backend"
+
+  # Cloud Run Service Names
+  _SERVICE_API:           "backend-api"
+  _SERVICE_SETUP:         "setup-worker"
+  _SERVICE_INTAKE:        "intake-worker"
+  _SERVICE_DOC_EDIT:      "document-edit-worker"
+
+  # Cloud Run Runtime Config
+  _SERVICE_ACCOUNT: "opandz-cloudrun-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+
+  # Scaling — API
+  _API_MAX_INSTANCES:    "10"
+  _API_CONCURRENCY:      "80"
+  _API_CPU:              "1"
+  _API_MEMORY:           "512Mi"
+
+  # Scaling — Workers (single-threaded RQ workers; more RAM for AI inference)
+  _WORKER_MAX_INSTANCES: "5"
+  _WORKER_CONCURRENCY:   "1"
+  _WORKER_CPU:           "2"
+  _WORKER_MEMORY:        "2Gi"
+
+# =============================================================================
+# OPTIONS
+# =============================================================================
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: "E2_HIGHCPU_8"
+  dynamic_substitutions: true
+
+# =============================================================================
+# STEPS
+# =============================================================================
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Step 0 — Print build context
+  # ---------------------------------------------------------------------------
+  - id: "info"
+    name: "gcr.io/cloud-builders/gcloud"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        echo "============================================"
+        echo " Opandz Legal AI — Cloud Build Pipeline"
+        echo "============================================"
+        echo " Project  : ${PROJECT_ID}"
+        echo " Region   : ${_REGION}"
+        echo " Repo     : ${_REPOSITORY}"
+        echo " Image    : ${_IMAGE_NAME}"
+        echo " Commit   : ${SHORT_SHA}"
+        echo "============================================"
+
+  # ---------------------------------------------------------------------------
+  # Step 1 — BUILD the Docker image (executed exactly ONCE)
+  #
+  # Tagged with both:
+  #   - SHORT_SHA  → immutable, pinned to this exact commit
+  #   - latest     → mutable convenience pointer
+  #
+  # Layer caching is enabled via --cache-from latest, dramatically reducing
+  # build time on repeated deploys when dependencies haven't changed.
+  # ---------------------------------------------------------------------------
+  - id: "build-image"
+    name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "--tag=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
+      - "--tag=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:latest"
+      - "--cache-from=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:latest"
+      - "--build-arg=BUILDKIT_INLINE_CACHE=1"
+      - "."
+    waitFor: ["info"]
+
+  # ---------------------------------------------------------------------------
+  # Step 2 — PUSH both tags to Artifact Registry
+  #
+  # All downstream deploy steps reference the immutable SHORT_SHA tag so every
+  # service runs byte-for-byte the same image.
+  # ---------------------------------------------------------------------------
+  - id: "push-image"
+    name: "gcr.io/cloud-builders/docker"
+    args:
+      - "push"
+      - "--all-tags"
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}"
+    waitFor: ["build-image"]
+
+  # ---------------------------------------------------------------------------
+  # Step 3a — DEPLOY: backend-api (FastAPI / uvicorn)
+  #
+  # Public-facing HTTP service. Deployed with --no-traffic first so the new
+  # revision can be verified before receiving live traffic (Step 4 migrates it).
+  #
+  # Command override:  uvicorn app:app --host 0.0.0.0 --port 8080
+  # ---------------------------------------------------------------------------
+  - id: "deploy-backend-api"
+    name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "${_SERVICE_API}"
+      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--service-account=${_SERVICE_ACCOUNT}"
+      - "--command=uvicorn"
+      - "--args=app:app,--host,0.0.0.0,--port,8080"
+      - "--port=8080"
+      - "--allow-unauthenticated"
+      - "--cpu=${_API_CPU}"
+      - "--memory=${_API_MEMORY}"
+      - "--concurrency=${_API_CONCURRENCY}"
+      - "--max-instances=${_API_MAX_INSTANCES}"
+      - "--no-traffic"
+    waitFor: ["push-image"]
+
+  # ---------------------------------------------------------------------------
+  # Step 3b — DEPLOY: setup-worker
+  #
+  # Internal RQ worker. No public traffic (--no-allow-unauthenticated).
+  # Command override:  python -m src.workers.setup_worker
+  # ---------------------------------------------------------------------------
+  - id: "deploy-setup-worker"
+    name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "${_SERVICE_SETUP}"
+      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--service-account=${_SERVICE_ACCOUNT}"
+      - "--command=python"
+      - "--args=-m,src.workers.setup_worker"
+      - "--port=8080"
+      - "--no-allow-unauthenticated"
+      - "--cpu=${_WORKER_CPU}"
+      - "--memory=${_WORKER_MEMORY}"
+      - "--concurrency=${_WORKER_CONCURRENCY}"
+      - "--max-instances=${_WORKER_MAX_INSTANCES}"
+    waitFor: ["push-image"]
+
+  # ---------------------------------------------------------------------------
+  # Step 3c — DEPLOY: intake-worker
+  #
+  # Internal RQ worker for case intake / document ingestion.
+  # Command override:  python -m src.workers.intake_worker
+  # ---------------------------------------------------------------------------
+  - id: "deploy-intake-worker"
+    name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "${_SERVICE_INTAKE}"
+      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--service-account=${_SERVICE_ACCOUNT}"
+      - "--command=python"
+      - "--args=-m,src.workers.intake_worker"
+      - "--port=8080"
+      - "--no-allow-unauthenticated"
+      - "--cpu=${_WORKER_CPU}"
+      - "--memory=${_WORKER_MEMORY}"
+      - "--concurrency=${_WORKER_CONCURRENCY}"
+      - "--max-instances=${_WORKER_MAX_INSTANCES}"
+    waitFor: ["push-image"]
+
+  # ---------------------------------------------------------------------------
+  # Step 3d — DEPLOY: document-edit-worker
+  #
+  # Internal RQ worker for DOCX generation / document editing.
+  # Command override:  python -m src.workers.document_edit_worker
+  # ---------------------------------------------------------------------------
+  - id: "deploy-document-edit-worker"
+    name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "${_SERVICE_DOC_EDIT}"
+      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--service-account=${_SERVICE_ACCOUNT}"
+      - "--command=python"
+      - "--args=-m,src.workers.document_edit_worker"
+      - "--port=8080"
+      - "--no-allow-unauthenticated"
+      - "--cpu=${_WORKER_CPU}"
+      - "--memory=${_WORKER_MEMORY}"
+      - "--concurrency=${_WORKER_CONCURRENCY}"
+      - "--max-instances=${_WORKER_MAX_INSTANCES}"
+    waitFor: ["push-image"]
+
+  # ---------------------------------------------------------------------------
+  # Step 4 — MIGRATE TRAFFIC to new backend-api revision
+  #
+  # Only after ALL four services have deployed successfully does this step
+  # execute, cutting over 100% of production traffic to the new API revision.
+  # Workers always serve the latest revision automatically.
+  # ---------------------------------------------------------------------------
+  - id: "migrate-traffic-api"
+    name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "services"
+      - "update-traffic"
+      - "${_SERVICE_API}"
+      - "--region=${_REGION}"
+      - "--to-latest"
+    waitFor:
+      - "deploy-backend-api"
+      - "deploy-setup-worker"
+      - "deploy-intake-worker"
+      - "deploy-document-edit-worker"
+
+# =============================================================================
+# ARTIFACT REGISTRY — final image references recorded in Cloud Build history
+# =============================================================================
+
+images:
+  - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
+  - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:latest"
+
+# =============================================================================
+# BUILD TIMEOUT — 30 min, generous for large Python dependency installs
+# =============================================================================
+
+timeout: "1800s"
