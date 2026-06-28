@@ -1,0 +1,9 @@
+# Force LF line endings for all files going into the repo
+* text=auto eol=lf
+
+# Explicitly force LF for Docker and shell files
+Dockerfile text eol=lf
+*.sh text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.py text eol=lf
