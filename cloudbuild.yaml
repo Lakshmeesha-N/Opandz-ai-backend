@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 # cloudbuild.yaml — Opandz Legal AI Backend
 # =============================================================================
 #
@@ -57,6 +57,13 @@ substitutions:
 
   # Cloud Run Runtime Config
   _SERVICE_ACCOUNT: "opandz-cloudrun-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+
+  # LLM Configuration
+  _LLM_PROVIDER:       "gemini"
+  _LLM_MODEL:          "gemini-2.5-flash-lite"
+  _VISION_LLM_MODEL:   "gemini-2.5-flash-lite"
+  _DOCX_LLM_MODEL:     "gemini-2.5-flash-lite"
+  _GCP_LOCATION:       "global"
 
   # Scaling — API
   _API_MAX_INSTANCES:    "10"
@@ -166,6 +173,7 @@ steps:
       - "--memory=${_API_MEMORY}"
       - "--concurrency=${_API_CONCURRENCY}"
       - "--max-instances=${_API_MAX_INSTANCES}"
+      - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
       - "--no-traffic"
     waitFor: ["push-image"]
 
@@ -194,6 +202,7 @@ steps:
       - "--memory=${_WORKER_MEMORY}"
       - "--concurrency=${_WORKER_CONCURRENCY}"
       - "--max-instances=${_WORKER_MAX_INSTANCES}"
+      - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
@@ -221,6 +230,7 @@ steps:
       - "--memory=${_WORKER_MEMORY}"
       - "--concurrency=${_WORKER_CONCURRENCY}"
       - "--max-instances=${_WORKER_MAX_INSTANCES}"
+      - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
@@ -248,6 +258,7 @@ steps:
       - "--memory=${_WORKER_MEMORY}"
       - "--concurrency=${_WORKER_CONCURRENCY}"
       - "--max-instances=${_WORKER_MAX_INSTANCES}"
+      - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
