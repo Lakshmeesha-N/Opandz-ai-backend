@@ -156,25 +156,37 @@ steps:
   # ---------------------------------------------------------------------------
   - id: "deploy-backend-api"
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    entrypoint: "gcloud"
+    entrypoint: "bash"
     args:
-      - "run"
-      - "deploy"
-      - "${_SERVICE_API}"
-      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
-      - "--region=${_REGION}"
-      - "--platform=managed"
-      - "--service-account=${_SERVICE_ACCOUNT}"
-      - "--command=uvicorn"
-      - "--args=app:app,--host,0.0.0.0,--port,8080"
-      - "--port=8080"
-      - "--allow-unauthenticated"
-      - "--cpu=${_API_CPU}"
-      - "--memory=${_API_MEMORY}"
-      - "--concurrency=${_API_CONCURRENCY}"
-      - "--max-instances=${_API_MAX_INSTANCES}"
-      - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
-      - "--no-traffic"
+      - "-c"
+      - |
+        # Detect whether the service already exists.
+        # --no-traffic is only valid on UPDATE (existing service), not CREATE.
+        if gcloud run services describe "${_SERVICE_API}" \
+             --region="${_REGION}" --platform=managed \
+             --project="${PROJECT_ID}" > /dev/null 2>&1; then
+          NO_TRAFFIC_FLAG="--no-traffic"
+          echo "Service exists — deploying with --no-traffic (Step 4 will cut over)."
+        else
+          NO_TRAFFIC_FLAG=""
+          echo "New service — deploying without --no-traffic (traffic goes live immediately)."
+        fi
+
+        gcloud run deploy "${_SERVICE_API}" \
+          --image="${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}" \
+          --region="${_REGION}" \
+          --platform=managed \
+          --service-account="${_SERVICE_ACCOUNT}" \
+          --command=uvicorn \
+          --args="app:app,--host,0.0.0.0,--port,8080" \
+          --port=8080 \
+          --allow-unauthenticated \
+          --cpu="${_API_CPU}" \
+          --memory="${_API_MEMORY}" \
+          --concurrency="${_API_CONCURRENCY}" \
+          --max-instances="${_API_MAX_INSTANCES}" \
+          --set-env-vars="LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}" \
+          $NO_TRAFFIC_FLAG
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
