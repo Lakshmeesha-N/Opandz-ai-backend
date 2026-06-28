@@ -1,14 +1,17 @@
 # src/workers/document_edit_worker.py
 #
 # RQ worker entrypoint for the Document Edit Agent.
-# Run with: rq worker document_edit
+# Run with: python -m src.workers.document_edit_worker
 
 import asyncio
 import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Dict, Any
 import logging
 
-from rq import get_current_job
+from rq import get_current_job, Worker
+from redis import Redis
 
 from src.agents.document_edit_agent.graph import graph as document_edit_graph
 from src.utils.cleanup import cleanup_temp_file
@@ -95,3 +98,36 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
             await update_job_in_firestore(job_id, "failed", error=error_msg)
         raise
 
+
+# ---------------------------------------------------------------------------
+# Cloud Run requires the container to bind to $PORT.
+# We run the RQ worker in a daemon thread and serve a tiny health-check
+# HTTP server on the main thread so Cloud Run considers the container healthy.
+# ---------------------------------------------------------------------------
+class _HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+
+    def log_message(self, format, *args):  # silence access logs
+        pass
+
+
+if __name__ == "__main__":
+    from src.core.config import settings
+
+    redis_conn = Redis.from_url(settings.REDIS_URL)
+
+    def _run_worker():
+        worker = Worker(["document_edit"], connection=redis_conn)
+        worker.work()
+
+    t = threading.Thread(target=_run_worker, daemon=True)
+    t.start()
+    logging.basicConfig(level=logging.INFO)
+    logging.info("document-edit-worker: RQ worker started, serving health-check on port %s", os.environ.get("PORT", "8080"))
+
+    port = int(os.environ.get("PORT", "8080"))
+    server = HTTPServer(("0.0.0.0", port), _HealthHandler)
+    server.serve_forever()
