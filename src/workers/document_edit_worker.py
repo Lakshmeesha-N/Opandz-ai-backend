@@ -144,7 +144,7 @@ if __name__ == "__main__":
     def _run_worker():
         try:
             from src.core.config import settings
-            redis_conn = Redis.from_url(settings.REDIS_URL)
+            redis_conn = Redis.from_url(settings.redis_url)
             worker = Worker(["document_edit"], connection=redis_conn)
             logging.info("document-edit-worker: connected to Redis, starting worker loop")
             worker.work()
