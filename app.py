@@ -37,7 +37,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://opandz-ai.web.app",
+        "https://opandzai.web.app",
     ],
     allow_credentials=True,
     allow_methods=[
