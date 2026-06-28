@@ -235,7 +235,7 @@ steps:
       - "--platform=managed"
       - "--service-account=${_SERVICE_ACCOUNT}"
       - "--command=python"
-      - "--args=-m,src.workers.intake_worker"
+      - "--args=-m,src.workers.case_intake_worker"
       - "--port=8080"
       - "--no-allow-unauthenticated"
       - "--cpu=${_WORKER_CPU}"

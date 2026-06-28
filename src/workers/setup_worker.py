@@ -1,12 +1,16 @@
 # src/workers/setup_worker.py
 #
 # RQ worker entrypoint for the Setup Agent.
-# Run with: rq worker setup
+# Run with: python -m src.workers.setup_worker
 
+import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Dict, Any
 import logging
 
-from rq import get_current_job
+from rq import get_current_job, Worker
+from redis import Redis
 
 from src.agents.setup_agent.graph import setup_agent_graph
 from src.core import firebase
@@ -65,3 +69,37 @@ def run_graph(payload: Dict[str, Any]):
         raise
     finally:
         cleanup_temp_file(payload.get("file_path"))
+
+
+# ---------------------------------------------------------------------------
+# Cloud Run requires the container to bind to $PORT.
+# We run the RQ worker in a daemon thread and serve a tiny health-check
+# HTTP server on the main thread so Cloud Run considers the container healthy.
+# ---------------------------------------------------------------------------
+class _HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+
+    def log_message(self, format, *args):  # silence access logs
+        pass
+
+
+if __name__ == "__main__":
+    from src.core.config import settings
+
+    redis_conn = Redis.from_url(settings.REDIS_URL)
+
+    def _run_worker():
+        worker = Worker(["setup"], connection=redis_conn)
+        worker.work()
+
+    t = threading.Thread(target=_run_worker, daemon=True)
+    t.start()
+    logging.basicConfig(level=logging.INFO)
+    logging.info("setup-worker: RQ worker started, serving health-check on port %s", os.environ.get("PORT", "8080"))
+
+    port = int(os.environ.get("PORT", "8080"))
+    server = HTTPServer(("0.0.0.0", port), _HealthHandler)
+    server.serve_forever()
