@@ -38,3 +38,5 @@ info/
 # OS
 .DS_Store
 Thumbs.db
+
+.pdf
