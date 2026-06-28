@@ -33,15 +33,31 @@ def initialize_firebase():
     if firebase_admin._apps:
         return firebase_admin.get_app()
 
-    cred = credentials.Certificate(settings.firebase_credentials_path)
+    if settings.firebase_credentials_path:
+        cred = credentials.Certificate(settings.firebase_credentials_path)
+    else:
+        # Fallback to Application Default Credentials on Cloud Run / GCP environments
+        try:
+            cred = credentials.ApplicationDefault()
+        except Exception as e:
+            # If not in GCP and no credentials path, we might want to fall back to mocks
+            if settings.allow_firebase_mocks or settings.LOCAL_TEST:
+                return None
+            raise e
 
-    return firebase_admin.initialize_app(
-        cred,
-        {
-            "projectId": settings.firebase_project_id,
-            "storageBucket": settings.firebase_storage_bucket,
-        },
-    )
+    # Build options
+    options = {}
+    proj_id = settings.firebase_project_id or settings.project_id
+    if proj_id:
+        options["projectId"] = proj_id
+        
+    bucket_name = settings.firebase_storage_bucket
+    if not bucket_name and proj_id:
+        bucket_name = f"{proj_id}.firebasestorage.app"
+    if bucket_name:
+        options["storageBucket"] = bucket_name
+
+    return firebase_admin.initialize_app(cred, options)
 
 
 class _MockDocument:
@@ -86,9 +102,10 @@ def get_firestore():
 
     The mock stores documents as JSON under `.local_firestore/<collection>/<id>.json`.
     """
-    if _HAS_FIREBASE and settings.firebase_credentials_path:
-        initialize_firebase()
-        return firestore.client()
+    if _HAS_FIREBASE:
+        if settings.firebase_credentials_path or not (settings.allow_firebase_mocks or settings.LOCAL_TEST):
+            initialize_firebase()
+            return firestore.client()
 
     # Not installed or credentials missing: return a simple local mock when allowed
     if settings.allow_firebase_mocks or settings.LOCAL_TEST:
@@ -107,9 +124,10 @@ def get_storage():
     The mock is not implemented fully; callers should guard for None when running
     in local/test mode.
     """
-    if _HAS_FIREBASE and settings.firebase_credentials_path:
-        initialize_firebase()
-        return storage.bucket()
+    if _HAS_FIREBASE:
+        if settings.firebase_credentials_path or not (settings.allow_firebase_mocks or settings.LOCAL_TEST):
+            initialize_firebase()
+            return storage.bucket()
 
     if settings.allow_firebase_mocks or settings.LOCAL_TEST:
         return None
@@ -128,7 +146,4 @@ def ensure_globals():
     if db is None:
         db = get_firestore()
     if bucket is None:
-        bucket = get_storage()
-
-
-ensure_globals()
+        bucket = get_storage()

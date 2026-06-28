@@ -14,6 +14,9 @@ class Settings(BaseSettings):
 
     # Google / Firebase
     project_id: Optional[str] = Field(None, env="PROJECT_ID")
+    firebase_project_id: Optional[str] = Field(None, env="FIREBASE_PROJECT_ID")
+    firebase_storage_bucket: Optional[str] = Field(None, env="FIREBASE_STORAGE_BUCKET")
+    firebase_credentials_path: Optional[str] = Field(None, env="FIREBASE_CREDENTIALS_PATH")
 
     # API keys (never set defaults here)
     gemini_api_key: Optional[str] = Field(None, env="GEMINI_API_KEY")

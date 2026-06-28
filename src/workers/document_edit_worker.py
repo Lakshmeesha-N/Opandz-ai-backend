@@ -15,12 +15,37 @@ from redis import Redis
 
 from src.agents.document_edit_agent.graph import graph as document_edit_graph
 from src.utils.cleanup import cleanup_temp_file
-from src.agents.document_edit_agent.helpers.redis_store import (
-    save_job_result,
-    save_job_to_firestore,
-    update_job_in_firestore,
-)
+from src.agents.document_edit_agent.helpers.redis_store import save_job_result
 from src.core import firebase
+
+
+def save_job_to_firestore(job_id: str, status: str, payload: Dict[str, Any]):
+    firebase.ensure_globals()
+    db = firebase.db
+    if db:
+        try:
+            db.collection("jobs").document(job_id).set({
+                "status": status,
+                "agent": "document_edit",
+                "payload": payload
+            })
+        except Exception:
+            logging.exception("Failed to save job to firestore: %s", job_id)
+
+
+def update_job_in_firestore(job_id: str, status: str, result: Any = None, error: Any = None):
+    firebase.ensure_globals()
+    db = firebase.db
+    if db:
+        try:
+            update_data = {"status": status}
+            if result is not None:
+                update_data["result"] = result
+            if error is not None:
+                update_data["error"] = error
+            db.collection("jobs").document(job_id).update(update_data)
+        except Exception:
+            logging.exception("Failed to update job in firestore: %s", job_id)
 
 
 def run_document_edit_graph(payload: Dict[str, Any]):
@@ -45,8 +70,8 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
 
     # Seed job document so the API can poll status (non-blocking)
     if job_id:
-        await save_job_result(job_id, "running")
-        await save_job_to_firestore(job_id, "running", payload)
+        save_job_result(job_id, "running")
+        save_job_to_firestore(job_id, "running", payload)
 
     try:
         initial_state = {
@@ -85,8 +110,8 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
                 cleanup_temp_file(f_path)
 
         if job_id:
-            await save_job_result(job_id, status, generated_code, error_msg)
-            await update_job_in_firestore(job_id, status, result=result)
+            save_job_result(job_id, status, generated_code, error_msg)
+            update_job_in_firestore(job_id, status, result=result)
 
         return result
 
@@ -94,8 +119,8 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
         logging.exception("Document edit worker run_graph failed")
         error_msg = str(e)
         if job_id:
-            await save_job_result(job_id, "failed", "", error_msg)
-            await update_job_in_firestore(job_id, "failed", error=error_msg)
+            save_job_result(job_id, "failed", "", error_msg)
+            update_job_in_firestore(job_id, "failed", error=error_msg)
         raise
 
 
