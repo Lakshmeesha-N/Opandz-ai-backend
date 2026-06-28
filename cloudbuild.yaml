@@ -186,7 +186,7 @@ steps:
           --concurrency="${_API_CONCURRENCY}" \
           --max-instances="${_API_MAX_INSTANCES}" \
           --set-env-vars="LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}" \
-          $NO_TRAFFIC_FLAG
+          $$NO_TRAFFIC_FLAG
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
