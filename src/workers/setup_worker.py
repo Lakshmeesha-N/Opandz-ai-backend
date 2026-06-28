@@ -10,6 +10,7 @@ from rq import get_current_job
 
 from src.agents.setup_agent.graph import setup_agent_graph
 from src.core import firebase
+from src.utils.cleanup import cleanup_temp_file
 
 
 def run_graph(payload: Dict[str, Any]):
@@ -62,3 +63,5 @@ def run_graph(payload: Dict[str, Any]):
             except Exception:
                 logging.exception("Failed to write job failure doc")
         raise
+    finally:
+        cleanup_temp_file(payload.get("file_path"))

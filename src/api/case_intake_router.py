@@ -65,7 +65,33 @@ def start_intake(
         for file in files:
             if not file.filename:
                 continue
-            temp_file_path = temp_dir / file.filename
+
+            filename = file.filename
+            # Validate file type (must be pdf or docx)
+            if not (filename.lower().endswith(".pdf") or filename.lower().endswith(".docx")):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Only PDF and DOCX files are supported."
+                )
+
+            # Validate file size (must not exceed 1 MB)
+            try:
+                file.file.seek(0, 2)
+                file_size = file.file.tell()
+                file.file.seek(0)
+            except Exception:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Failed to read the uploaded file size."
+                )
+
+            if file_size > 1 * 1024 * 1024:
+                raise HTTPException(
+                    status_code=400,
+                    detail="The selected document exceeds the maximum supported size (1 MB)."
+                )
+
+            temp_file_path = temp_dir / filename
             with open(temp_file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
             uploaded_files.append(str(temp_file_path.absolute()))
