@@ -83,8 +83,9 @@ def run_intake_graph(payload: Dict[str, Any]):
 
 # ---------------------------------------------------------------------------
 # Cloud Run requires the container to bind to $PORT.
-# We run the RQ worker in a daemon thread and serve a tiny health-check
-# HTTP server on the main thread so Cloud Run considers the container healthy.
+# HTTP server starts FIRST so the health-check always responds.
+# The RQ worker runs in a daemon thread; any startup failure there
+# is logged but does NOT prevent the health-check from binding.
 # ---------------------------------------------------------------------------
 class _HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -97,20 +98,22 @@ class _HealthHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    from src.core.config import settings
-
-    redis_conn = Redis.from_url(settings.REDIS_URL)
+    logging.basicConfig(level=logging.INFO)
 
     def _run_worker():
-        worker = Worker(["intake"], connection=redis_conn)
-        worker.work()
+        try:
+            from src.core.config import settings
+            redis_conn = Redis.from_url(settings.REDIS_URL)
+            worker = Worker(["intake"], connection=redis_conn)
+            logging.info("intake-worker: connected to Redis, starting worker loop")
+            worker.work()
+        except Exception:
+            logging.exception("intake-worker: worker thread crashed — health-check still running")
 
     t = threading.Thread(target=_run_worker, daemon=True)
     t.start()
-    logging.basicConfig(level=logging.INFO)
-    logging.info("intake-worker: RQ worker started, serving health-check on port %s", os.environ.get("PORT", "8080"))
 
     port = int(os.environ.get("PORT", "8080"))
+    logging.info("intake-worker: serving health-check on port %s", port)
     server = HTTPServer(("0.0.0.0", port), _HealthHandler)
     server.serve_forever()
-
