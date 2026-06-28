@@ -60,9 +60,9 @@ substitutions:
 
   # LLM Configuration
   _LLM_PROVIDER:       "gemini"
-  _LLM_MODEL:          "gemini-2.5-flash-lite"
-  _VISION_LLM_MODEL:   "gemini-2.5-flash-lite"
-  _DOCX_LLM_MODEL:     "gemini-2.5-flash-lite"
+  _LLM_MODEL:          "gemini-3.1-flash-lite"
+  _VISION_LLM_MODEL:   "gemini-3.1-flash-lite"
+  _DOCX_LLM_MODEL:     "gemini-3.1-flash-lite"
   _GCP_LOCATION:       "global"
 
   # Scaling — API
