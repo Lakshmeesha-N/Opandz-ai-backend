@@ -88,20 +88,12 @@ class _HealthHandler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
-    def _run_worker():
-        try:
-            from src.core.config import settings
-            redis_conn = Redis.from_url(settings.redis_url)
-            worker = Worker(["setup"], connection=redis_conn)
-            logging.info("setup-worker: connected to Redis, starting worker loop")
-            worker.work()
-        except Exception:
-            logging.exception("setup-worker: worker thread crashed — health-check still running")
-
-    t = threading.Thread(target=_run_worker, daemon=True)
-    t.start()
-
-    port = int(os.environ.get("PORT", "8080"))
-    logging.info("setup-worker: serving health-check on port %s", port)
-    server = HTTPServer(("0.0.0.0", port), _HealthHandler)
-    server.serve_forever()
+    try:
+        from src.core.config import settings
+        redis_conn = Redis.from_url(settings.redis_url)
+        worker = Worker(["setup"], connection=redis_conn)
+        logging.info("setup-worker: connected to Redis, starting worker loop")
+        # Do not use threading.Thread here
+        worker.work()
+    except Exception:
+        logging.exception("setup-worker: worker crashed")

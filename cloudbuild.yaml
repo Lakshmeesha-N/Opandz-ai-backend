@@ -5,14 +5,16 @@
 # Strategy: BUILD ONCE → DEPLOY EVERYWHERE
 # ─────────────────────────────────────────
 # A single Docker image is built and pushed to Artifact Registry.
-# All four Cloud Run services are then deployed from the EXACT same image
-# digest, guaranteeing that the Web API and every Worker are always in sync.
+# The Web API is deployed as a Cloud Run Service.
+# The three workers are deployed as Cloud Run Jobs — they run RQ loops and
+# have no HTTP endpoint, so Jobs are the correct primitive (no health-check
+# requirement, no unwanted scaling behaviour).
 #
-# Services deployed:
-#   1. backend-api            → uvicorn (FastAPI web server)
-#   2. setup-worker           → python -m src.workers.setup_worker
-#   3. intake-worker          → python -m src.workers.intake_worker
-#   4. document-edit-worker   → python -m src.workers.document_edit_worker
+# Services / Jobs deployed:
+#   SERVICE  backend-api            → uvicorn (FastAPI web server)
+#   JOB      setup-worker           → python -m src.workers.setup_worker
+#   JOB      intake-worker          → python -m src.workers.intake_worker
+#   JOB      document-edit-worker   → python -m src.workers.document_edit_worker
 #
 # =============================================================================
 # HOW TO TRIGGER
@@ -49,11 +51,13 @@ substitutions:
   # Image
   _IMAGE_NAME:     "opandz-backend"
 
-  # Cloud Run Service Names
+  # Cloud Run Service Name (API only)
   _SERVICE_API:           "backend-api"
-  _SERVICE_SETUP:         "setup-worker"
-  _SERVICE_INTAKE:        "intake-worker"
-  _SERVICE_DOC_EDIT:      "document-edit-worker"
+
+  # Cloud Run Job Names (workers — no HTTP server, no health check needed)
+  _JOB_SETUP:             "setup-worker"
+  _JOB_INTAKE:            "intake-worker"
+  _JOB_DOC_EDIT:          "document-edit-worker"
 
   # Cloud Run Runtime Config
   _SERVICE_ACCOUNT: "opandz-cloudrun-sa@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -65,17 +69,17 @@ substitutions:
   _DOCX_LLM_MODEL:     "gemini-3.1-flash-lite"
   _GCP_LOCATION:       "global"
 
-  # Scaling — API
+  # Scaling — API Service
   _API_MAX_INSTANCES:    "10"
   _API_CONCURRENCY:      "80"
   _API_CPU:              "1"
   _API_MEMORY:           "512Mi"
 
-  # Scaling — Workers (single-threaded RQ workers; more RAM for AI inference)
-  _WORKER_MAX_INSTANCES: "5"
-  _WORKER_CONCURRENCY:   "1"
+  # Resources — Worker Jobs (more RAM for AI inference; parallelism=1 per execution)
   _WORKER_CPU:           "2"
   _WORKER_MEMORY:        "2Gi"
+  _WORKER_PARALLELISM:   "1"       # tasks run in parallel within one Job execution
+  _WORKER_MAX_RETRIES:   "3"       # automatic retries on non-zero exit
 
 # =============================================================================
 # OPTIONS
@@ -109,6 +113,9 @@ steps:
         echo " Repo     : ${_REPOSITORY}"
         echo " Image    : ${_IMAGE_NAME}"
         echo " Commit   : ${SHORT_SHA}"
+        echo "--------------------------------------------"
+        echo " API Service : ${_SERVICE_API}"
+        echo " Worker Jobs : ${_JOB_SETUP}, ${_JOB_INTAKE}, ${_JOB_DOC_EDIT}"
         echo "============================================"
 
   # ---------------------------------------------------------------------------
@@ -136,7 +143,7 @@ steps:
   # Step 2 — PUSH both tags to Artifact Registry
   #
   # All downstream deploy steps reference the immutable SHORT_SHA tag so every
-  # service runs byte-for-byte the same image.
+  # service/job runs byte-for-byte the same image.
   # ---------------------------------------------------------------------------
   - id: "push-image"
     name: "gcr.io/cloud-builders/docker"
@@ -147,7 +154,7 @@ steps:
     waitFor: ["build-image"]
 
   # ---------------------------------------------------------------------------
-  # Step 3a — DEPLOY: backend-api (FastAPI / uvicorn)
+  # Step 3a — DEPLOY: backend-api (FastAPI / uvicorn) — Cloud Run SERVICE
   #
   # Public-facing HTTP service. Deployed with --no-traffic first so the new
   # revision can be verified before receiving live traffic (Step 4 migrates it).
@@ -191,98 +198,124 @@ steps:
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
-  # Step 3b — DEPLOY: setup-worker
+  # Step 3b — CREATE/UPDATE: setup-worker — Cloud Run JOB
   #
-  # Internal RQ worker. No public traffic (--no-allow-unauthenticated).
+  # Jobs run to completion and do NOT require an HTTP health check endpoint.
+  # `gcloud run jobs create` is used on first deploy; subsequent deploys use
+  # `gcloud run jobs update` to swap in the new image.
+  #
   # Command override:  python -m src.workers.setup_worker
+  #
+  # NOTE: To execute the job after deployment, run:
+  #   gcloud run jobs execute setup-worker --region=asia-south2
+  # Or trigger it from the API / Cloud Scheduler as required.
   # ---------------------------------------------------------------------------
   - id: "deploy-setup-worker"
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    entrypoint: "gcloud"
+    entrypoint: "bash"
     args:
-      - "run"
-      - "deploy"
-      - "${_SERVICE_SETUP}"
-      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
-      - "--region=${_REGION}"
-      - "--platform=managed"
-      - "--service-account=${_SERVICE_ACCOUNT}"
-      - "--command=python"
-      - "--args=-m,src.workers.setup_worker"
-      - "--port=8080"
-      - "--no-allow-unauthenticated"
-      - "--cpu=${_WORKER_CPU}"
-      - "--memory=${_WORKER_MEMORY}"
-      - "--concurrency=${_WORKER_CONCURRENCY}"
-      - "--max-instances=${_WORKER_MAX_INSTANCES}"
-      - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
-      - "--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest"
+      - "-c"
+      - |
+        JOB_FLAGS=(
+          --image="${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
+          --region="${_REGION}"
+          --service-account="${_SERVICE_ACCOUNT}"
+          --command="python"
+          --args="-m,src.workers.setup_worker"
+          --cpu="${_WORKER_CPU}"
+          --memory="${_WORKER_MEMORY}"
+          --parallelism="${_WORKER_PARALLELISM}"
+          --max-retries="${_WORKER_MAX_RETRIES}"
+          --set-env-vars="LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
+          --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest"
+        )
+
+        if gcloud run jobs describe "${_JOB_SETUP}" \
+             --region="${_REGION}" --project="${PROJECT_ID}" > /dev/null 2>&1; then
+          echo "Job exists — updating ${_JOB_SETUP}."
+          gcloud run jobs update "${_JOB_SETUP}" "${JOB_FLAGS[@]}"
+        else
+          echo "Job not found — creating ${_JOB_SETUP}."
+          gcloud run jobs create "${_JOB_SETUP}" "${JOB_FLAGS[@]}"
+        fi
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
-  # Step 3c — DEPLOY: intake-worker
+  # Step 3c — CREATE/UPDATE: intake-worker — Cloud Run JOB
   #
-  # Internal RQ worker for case intake / document ingestion.
-  # Command override:  python -m src.workers.intake_worker
+  # Command override:  python -m src.workers.case_intake_worker
   # ---------------------------------------------------------------------------
   - id: "deploy-intake-worker"
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    entrypoint: "gcloud"
+    entrypoint: "bash"
     args:
-      - "run"
-      - "deploy"
-      - "${_SERVICE_INTAKE}"
-      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
-      - "--region=${_REGION}"
-      - "--platform=managed"
-      - "--service-account=${_SERVICE_ACCOUNT}"
-      - "--command=python"
-      - "--args=-m,src.workers.case_intake_worker"
-      - "--port=8080"
-      - "--no-allow-unauthenticated"
-      - "--cpu=${_WORKER_CPU}"
-      - "--memory=${_WORKER_MEMORY}"
-      - "--concurrency=${_WORKER_CONCURRENCY}"
-      - "--max-instances=${_WORKER_MAX_INSTANCES}"
-      - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
-      - "--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest"
+      - "-c"
+      - |
+        JOB_FLAGS=(
+          --image="${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
+          --region="${_REGION}"
+          --service-account="${_SERVICE_ACCOUNT}"
+          --command="python"
+          --args="-m,src.workers.case_intake_worker"
+          --cpu="${_WORKER_CPU}"
+          --memory="${_WORKER_MEMORY}"
+          --parallelism="${_WORKER_PARALLELISM}"
+          --max-retries="${_WORKER_MAX_RETRIES}"
+          --set-env-vars="LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
+          --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest"
+        )
+
+        if gcloud run jobs describe "${_JOB_INTAKE}" \
+             --region="${_REGION}" --project="${PROJECT_ID}" > /dev/null 2>&1; then
+          echo "Job exists — updating ${_JOB_INTAKE}."
+          gcloud run jobs update "${_JOB_INTAKE}" "${JOB_FLAGS[@]}"
+        else
+          echo "Job not found — creating ${_JOB_INTAKE}."
+          gcloud run jobs create "${_JOB_INTAKE}" "${JOB_FLAGS[@]}"
+        fi
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
-  # Step 3d — DEPLOY: document-edit-worker
+  # Step 3d — CREATE/UPDATE: document-edit-worker — Cloud Run JOB
   #
-  # Internal RQ worker for DOCX generation / document editing.
   # Command override:  python -m src.workers.document_edit_worker
   # ---------------------------------------------------------------------------
   - id: "deploy-document-edit-worker"
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    entrypoint: "gcloud"
+    entrypoint: "bash"
     args:
-      - "run"
-      - "deploy"
-      - "${_SERVICE_DOC_EDIT}"
-      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
-      - "--region=${_REGION}"
-      - "--platform=managed"
-      - "--service-account=${_SERVICE_ACCOUNT}"
-      - "--command=python"
-      - "--args=-m,src.workers.document_edit_worker"
-      - "--port=8080"
-      - "--no-allow-unauthenticated"
-      - "--cpu=${_WORKER_CPU}"
-      - "--memory=${_WORKER_MEMORY}"
-      - "--concurrency=${_WORKER_CONCURRENCY}"
-      - "--max-instances=${_WORKER_MAX_INSTANCES}"
-      - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
-      - "--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest"
+      - "-c"
+      - |
+        JOB_FLAGS=(
+          --image="${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
+          --region="${_REGION}"
+          --service-account="${_SERVICE_ACCOUNT}"
+          --command="python"
+          --args="-m,src.workers.document_edit_worker"
+          --cpu="${_WORKER_CPU}"
+          --memory="${_WORKER_MEMORY}"
+          --parallelism="${_WORKER_PARALLELISM}"
+          --max-retries="${_WORKER_MAX_RETRIES}"
+          --set-env-vars="LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
+          --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest"
+        )
+
+        if gcloud run jobs describe "${_JOB_DOC_EDIT}" \
+             --region="${_REGION}" --project="${PROJECT_ID}" > /dev/null 2>&1; then
+          echo "Job exists — updating ${_JOB_DOC_EDIT}."
+          gcloud run jobs update "${_JOB_DOC_EDIT}" "${JOB_FLAGS[@]}"
+        else
+          echo "Job not found — creating ${_JOB_DOC_EDIT}."
+          gcloud run jobs create "${_JOB_DOC_EDIT}" "${JOB_FLAGS[@]}"
+        fi
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
   # Step 4 — MIGRATE TRAFFIC to new backend-api revision
   #
-  # Only after ALL four services have deployed successfully does this step
+  # Only after ALL four steps have completed successfully does this step
   # execute, cutting over 100% of production traffic to the new API revision.
-  # Workers always serve the latest revision automatically.
+  # (Worker Jobs have no traffic concept — they are managed above.)
   # ---------------------------------------------------------------------------
   - id: "migrate-traffic-api"
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
