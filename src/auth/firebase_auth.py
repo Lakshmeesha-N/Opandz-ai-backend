@@ -22,6 +22,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
+from src.core.firebase import initialize_firebase
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -106,6 +108,7 @@ async def get_current_user(
             detail="Authentication service is not configured.",
         )
 
+    initialize_firebase()
     token = credentials.credentials
 
     try:
