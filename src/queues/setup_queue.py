@@ -33,4 +33,4 @@ def enqueue_setup_job(payload: Dict[str, Any]) -> Optional[str]:
         "src.workers.setup_worker.run_graph",
         payload,
     )
-    return job.get_id()
+    return job.id

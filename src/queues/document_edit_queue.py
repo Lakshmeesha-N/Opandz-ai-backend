@@ -33,4 +33,4 @@ def enqueue_document_edit_job(payload: Dict[str, Any]) -> Optional[str]:
         "src.workers.document_edit_worker.run_document_edit_graph",
         payload,
     )
-    return job.get_id()
+    return job.id

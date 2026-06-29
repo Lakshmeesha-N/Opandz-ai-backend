@@ -38,7 +38,7 @@ def run_graph(payload: Dict[str, Any]):
     from src.utils.cleanup import cleanup_temp_file
 
     job = get_current_job()
-    job_id = job.get_id() if job else None
+    job_id = job.id if job else None
 
     firebase.ensure_globals()
     db = firebase.db

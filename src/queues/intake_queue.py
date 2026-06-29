@@ -33,4 +33,4 @@ def enqueue_intake_job(payload: Dict[str, Any]) -> Optional[str]:
         "src.workers.case_intake_worker.run_intake_graph",
         payload,
     )
-    return job.get_id()
+    return job.id
