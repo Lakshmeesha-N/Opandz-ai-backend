@@ -183,15 +183,27 @@ def get_status(
     job_id: str,
 ):
     """
-    Poll in-process job status
-    (only relevant when Redis is unavailable).
+    Poll job status.
+    - For RQ-backed jobs: reads status from Firestore (written by the worker).
+    - For in-process fallback jobs: reads from the in-memory JOBS dict.
     """
+    # 1. Check Firestore first (RQ worker writes status here)
+    try:
+        from src.core import firebase
+        firebase.ensure_globals()
+        db = firebase.db
+        if db:
+            doc = db.collection("jobs").document(job_id).get()
+            if doc.exists:
+                return doc.to_dict()
+    except Exception:
+        logging.exception("Failed to read job status from Firestore for job %s", job_id)
 
-    if job_id not in JOBS:
+    # 2. Fallback: in-memory store (inproc background task path)
+    if job_id in JOBS:
+        return JOBS[job_id]
 
-        raise HTTPException(
-            status_code=404,
-            detail="job not found",
-        )
-
-    return JOBS[job_id]
+    raise HTTPException(
+        status_code=404,
+        detail="job not found",
+    )
