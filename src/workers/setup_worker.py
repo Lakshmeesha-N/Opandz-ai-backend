@@ -2,26 +2,41 @@
 #
 # RQ worker entrypoint for the Setup Agent.
 # Run with: python -m src.workers.setup_worker
+#
+# STARTUP ORDER (critical for Cloud Run health-check):
+#   1. Bind port 8080 (health server) — FIRST, before any heavy imports
+#   2. Import agent graph + Firebase (may take several seconds on cold start)
+#   3. Connect to Redis
+#   4. Start RQ worker
 
+import logging
 import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Dict, Any
-import logging
+from typing import Any, Dict
 
-from rq import get_current_job, Worker
-from redis import Redis
 
-from src.agents.setup_agent.graph import setup_agent_graph
-from src.core import firebase
-from src.utils.cleanup import cleanup_temp_file
+# ---------------------------------------------------------------------------
+# Lightweight stdlib-only types — safe to import at module level.
+# Heavy imports (agent graphs, firebase, redis) are deferred to __main__
+# so they NEVER block the health-check port from binding.
+# ---------------------------------------------------------------------------
 
 
 def run_graph(payload: Dict[str, Any]):
     """
     Worker entrypoint for running the Setup Agent graph.
-    Called by the "setup" RQ queue.
+    Called by the \"setup\" RQ queue.
+    RQ imports this function by dotted path, so the heavy imports below
+    must have completed before a job is dispatched — which they will have,
+    since they're done synchronously in __main__ before worker.work().
     """
+    # These are already imported by the time a job runs (see __main__).
+    from rq import get_current_job
+    from src.core import firebase
+    from src.agents.setup_agent.graph import setup_agent_graph
+    from src.utils.cleanup import cleanup_temp_file
+
     job = get_current_job()
     job_id = job.get_id() if job else None
 
@@ -72,38 +87,56 @@ def run_graph(payload: Dict[str, Any]):
 
 
 # ---------------------------------------------------------------------------
-# Cloud Run requires the container to bind to $PORT.
-# HTTP server starts FIRST so the health-check always responds.
+# Health server — only stdlib, binds immediately
 # ---------------------------------------------------------------------------
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == "/healthz":
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"ok")
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+
     def log_message(self, format, *args):
         pass  # silence access logs
+
 
 def run_health_server():
     port = int(os.environ.get("PORT", "8080"))
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
     server.serve_forever()
 
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+
+    # ── Step 1: bind port 8080 IMMEDIATELY (before ANY heavy import) ────────
+    threading.Thread(target=run_health_server, daemon=True).start()
+    logging.info("setup-worker: health server bound to port %s", os.environ.get("PORT", "8080"))
+
     try:
-        from src.core.config import settings
+        # ── Step 2: heavy imports (firebase, agent graph) ───────────────────
+        logging.info("setup-worker: importing agent graph + firebase...")
+        from src.core.config import settings  # noqa: E402
+        from src.agents.setup_agent.graph import setup_agent_graph  # noqa: F401,E402
+        from src.core import firebase  # noqa: E402
+        firebase.ensure_globals()
+        logging.info("setup-worker: firebase initialized")
 
-        # Start health server FIRST so Cloud Run health-check always succeeds
-        # even if Redis/RQ startup is slow.
-        threading.Thread(target=run_health_server, daemon=True).start()
-        logging.info("setup-worker: health server running, starting RQ worker...")
-
+        # ── Step 3: connect to Redis ─────────────────────────────────────────
+        from redis import Redis  # noqa: E402
+        from rq import Worker  # noqa: E402
         redis_conn = Redis.from_url(settings.redis_url)
+        logging.info("setup-worker: redis connected")
 
-        # Run RQ worker on main thread
+        # ── Step 4: run RQ worker on main thread ─────────────────────────────
         worker = Worker(["setup"], connection=redis_conn)
         worker.work()
+
     except Exception:
-        logging.exception("setup-worker: worker crashed")
+        logging.exception("setup-worker: worker crashed — health server stays up")
+        # Keep the process alive so Cloud Run doesn't restart-loop instantly.
+        threading.Event().wait()

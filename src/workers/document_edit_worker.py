@@ -2,24 +2,30 @@
 #
 # RQ worker entrypoint for the Document Edit Agent.
 # Run with: python -m src.workers.document_edit_worker
+#
+# STARTUP ORDER (critical for Cloud Run health-check):
+#   1. Bind port 8080 (health server) — FIRST, before any heavy imports
+#   2. Import agent graph + Firebase (may take several seconds on cold start)
+#   3. Connect to Redis
+#   4. Start RQ worker
 
 import asyncio
+import logging
 import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Dict, Any
-import logging
+from typing import Any, Dict
 
-from rq import get_current_job, Worker
-from redis import Redis
 
-from src.agents.document_edit_agent.graph import graph as document_edit_graph
-from src.utils.cleanup import cleanup_temp_file
-from src.agents.document_edit_agent.helpers.redis_store import save_job_result
-from src.core import firebase
+# ---------------------------------------------------------------------------
+# Lightweight stdlib-only types — safe to import at module level.
+# Heavy imports (agent graphs, firebase, redis) are deferred to __main__
+# so they NEVER block the health-check port from binding.
+# ---------------------------------------------------------------------------
 
 
 def save_job_to_firestore(job_id: str, status: str, payload: Dict[str, Any]):
+    from src.core import firebase
     firebase.ensure_globals()
     db = firebase.db
     if db:
@@ -27,13 +33,14 @@ def save_job_to_firestore(job_id: str, status: str, payload: Dict[str, Any]):
             db.collection("jobs").document(job_id).set({
                 "status": status,
                 "agent": "document_edit",
-                "payload": payload
+                "payload": payload,
             })
         except Exception:
             logging.exception("Failed to save job to firestore: %s", job_id)
 
 
 def update_job_in_firestore(job_id: str, status: str, result: Any = None, error: Any = None):
+    from src.core import firebase
     firebase.ensure_globals()
     db = firebase.db
     if db:
@@ -51,18 +58,24 @@ def update_job_in_firestore(job_id: str, status: str, result: Any = None, error:
 def run_document_edit_graph(payload: Dict[str, Any]):
     """
     Worker entrypoint for running the Document Edit Agent graph.
-    Called by the "document_edit" RQ queue.
+    Called by the \"document_edit\" RQ queue.
     """
+    from rq import get_current_job
+    from src.core import firebase
+
     job = get_current_job()
     job_id = job.get_id() if job else None
 
     firebase.ensure_globals()
 
-    # We will invoke the async graph in an event loop
     return asyncio.run(_run_graph_async(job_id, payload))
 
 
 async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
+    from src.agents.document_edit_agent.graph import graph as document_edit_graph
+    from src.agents.document_edit_agent.helpers.redis_store import save_job_result
+    from src.utils.cleanup import cleanup_temp_file
+
     temp_file_path = None
     generated_code = ""
     status = "completed"
@@ -86,7 +99,6 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
             "error": None,
         }
 
-        # The function that calls graph.ainvoke(state) must wrap the invocation in a try/finally block
         result = None
         try:
             result = await document_edit_graph.ainvoke(initial_state)
@@ -103,8 +115,6 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
                     error_msg = result["error"]
                     status = "failed"
         finally:
-            # After graph.ainvoke() returns (or raises an exception), read state["temp_file_path"]
-            # from the returned state and delete the file if it exists.
             cleanup_temp_file(temp_file_path)
             for f_path in payload.get("uploaded_files", []):
                 cleanup_temp_file(f_path)
@@ -125,36 +135,57 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
 
 
 # ---------------------------------------------------------------------------
-# Cloud Run requires the container to bind to $PORT.
-# HTTP server starts FIRST so the health-check always responds.
-# ---------------------------------------------------------------
+# Health server — only stdlib, binds immediately
+# ---------------------------------------------------------------------------
+
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == "/healthz":
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"ok")
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+
     def log_message(self, format, *args):
         pass
+
 
 def run_health_server():
     port = int(os.environ.get("PORT", "8080"))
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
     server.serve_forever()
 
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+
+    # ── Step 1: bind port 8080 IMMEDIATELY (before ANY heavy import) ────────
+    threading.Thread(target=run_health_server, daemon=True).start()
+    logging.info("document-edit-worker: health server bound to port %s", os.environ.get("PORT", "8080"))
+
     try:
-        from src.core.config import settings
+        # ── Step 2: heavy imports (firebase, agent graph) ───────────────────
+        logging.info("document-edit-worker: importing agent graph + firebase...")
+        from src.core.config import settings  # noqa: E402
+        from src.agents.document_edit_agent.graph import graph as document_edit_graph  # noqa: F401,E402
+        from src.agents.document_edit_agent.helpers.redis_store import save_job_result  # noqa: F401,E402
+        from src.core import firebase  # noqa: E402
+        firebase.ensure_globals()
+        logging.info("document-edit-worker: firebase initialized")
+
+        # ── Step 3: connect to Redis ─────────────────────────────────────────
+        from redis import Redis  # noqa: E402
+        from rq import Worker  # noqa: E402
         redis_conn = Redis.from_url(settings.redis_url)
+        logging.info("document-edit-worker: redis connected")
 
-        # Start health server FIRST so Cloud Run health-check always succeeds
-        # even if Redis/RQ startup is slow.
-        threading.Thread(target=run_health_server, daemon=True).start()
-        logging.info("document-edit-worker: health server running, starting RQ worker...")
-
-        # Run RQ worker on main thread
+        # ── Step 4: run RQ worker on main thread ─────────────────────────────
         worker = Worker(["document_edit"], connection=redis_conn)
         worker.work()
+
     except Exception:
-        logging.exception("document-edit-worker: worker crashed")
+        logging.exception("document-edit-worker: worker crashed — health server stays up")
+        # Keep the process alive so Cloud Run doesn't restart-loop instantly.
+        threading.Event().wait()
