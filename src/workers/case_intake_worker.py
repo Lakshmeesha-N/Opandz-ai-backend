@@ -87,25 +87,37 @@ def run_intake_graph(payload: Dict[str, Any]):
 # The RQ worker runs in a daemon thread; any startup failure there
 # is logged but does NOT prevent the health-check from binding.
 # ---------------------------------------------------------------------------
-class _HealthHandler(BaseHTTPRequestHandler):
+import os, logging, threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from redis import Redis
+from rq import Worker
+
+class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"ok")
+        if self.path == "/healthz":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+    def log_message(self, format, *args):
+        pass  # silence access logs
 
-    def log_message(self, format, *args):  # silence access logs
-        pass
-
+def run_health_server():
+    port = int(os.environ.get("PORT", "8080"))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    server.serve_forever()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-
     try:
         from src.core.config import settings
         redis_conn = Redis.from_url(settings.redis_url)
+
+        # Start health server in background thread
+        threading.Thread(target=run_health_server, daemon=True).start()
+        logging.info("intake-worker: health server running, starting RQ worker...")
+
+        # Run RQ worker on main thread
         worker = Worker(["intake"], connection=redis_conn)
-        logging.info("intake-worker: connected to Redis, starting worker loop")
-        # Do not use threading.Thread here
         worker.work()
     except Exception:
         logging.exception("intake-worker: worker crashed")

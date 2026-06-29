@@ -127,26 +127,25 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
 # ---------------------------------------------------------------------------
 # Cloud Run requires the container to bind to $PORT.
 # HTTP server starts FIRST so the health-check always responds.
-# ---------------------------------------------------------------------------
-class _HealthHandler(BaseHTTPRequestHandler):
+# ---------------------------------------------------------------
+class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"ok")
-
-    def log_message(self, format, *args):  # silence access logs
+        if self.path == "/healthz":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+    def log_message(self, format, *args):
         pass
 
+def run_health_server():
+    port = int(os.environ.get("PORT", "8080"))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    server.serve_forever()
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    redis_conn = Redis.from_url(os.environ["REDIS_URL"])
+    threading.Thread(target=run_health_server, daemon=True).start()
+    logging.info("Health server running, starting RQ worker...")
+    worker = Worker(["document_edit"], connection=redis_conn)
+    worker.work()
 
-    try:
-        from src.core.config import settings
-        redis_conn = Redis.from_url(settings.redis_url)
-        worker = Worker(["document_edit"], connection=redis_conn)
-        logging.info("document-edit-worker: connected to Redis, starting worker loop")
-        # Do not use threading.Thread here
-        worker.work()
-    except Exception:
-        logging.exception("document-edit-worker: worker crashed")

@@ -75,25 +75,33 @@ def run_graph(payload: Dict[str, Any]):
 # Cloud Run requires the container to bind to $PORT.
 # HTTP server starts FIRST so the health-check always responds.
 # ---------------------------------------------------------------------------
-class _HealthHandler(BaseHTTPRequestHandler):
+
+class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"ok")
+        if self.path == "/healthz":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+    def log_message(self, format, *args):
+        pass  # silence access logs
 
-    def log_message(self, format, *args):  # silence access logs
-        pass
-
+def run_health_server():
+    port = int(os.environ.get("PORT", "8080"))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    server.serve_forever()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-
     try:
         from src.core.config import settings
         redis_conn = Redis.from_url(settings.redis_url)
+
+        # Start health server in background thread
+        threading.Thread(target=run_health_server, daemon=True).start()
+        logging.info("setup-worker: health server running, starting RQ worker...")
+
+        # Run RQ worker on main thread
         worker = Worker(["setup"], connection=redis_conn)
-        logging.info("setup-worker: connected to Redis, starting worker loop")
-        # Do not use threading.Thread here
         worker.work()
     except Exception:
         logging.exception("setup-worker: worker crashed")
