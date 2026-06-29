@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.auth.firebase_auth import CurrentUser, get_current_user
-from src.core.firebase import db
+from src.core.firebase import get_db
 
 router = APIRouter(
     prefix="/template-registry",
@@ -17,6 +17,7 @@ def get_vaults(
 ):
     """Return all vault names owned by the authenticated user."""
 
+    db = get_db()
     docs = (
         db.collection("template_registry")
         .where("lawyer_id", "==", current_user.uid)
@@ -42,6 +43,7 @@ def get_templates_in_vault(
 ):
     """Return all templates inside a vault owned by the authenticated user."""
 
+    db = get_db()
     docs = (
         db.collection("template_registry")
         .where("lawyer_id", "==", current_user.uid)
@@ -78,6 +80,7 @@ def get_template(
     Returns 403 if the template belongs to a different user.
     """
 
+    db = get_db()
     doc = (
         db.collection("template_registry")
         .document(template_id)

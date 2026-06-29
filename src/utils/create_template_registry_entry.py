@@ -1,9 +1,7 @@
-# src/agents/setup_agent/helpers/create_template_registry_entry.py
-
 from datetime import datetime
 
 
-from src.core.firebase import db
+from src.core.firebase import get_db
 
 def create_template_registry_entry(
     template_id: str,
@@ -12,6 +10,7 @@ def create_template_registry_entry(
     template_name: str,
 ) -> None:
 
+    db = get_db()
     db.collection(
         "template_registry",
     ).document(

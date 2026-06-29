@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from src.core.firebase import db
+from src.core.firebase import get_db
 
 
 def update_generated_document(
@@ -8,6 +8,7 @@ def update_generated_document(
     generated_docxjs_code: str,
 ) -> None:
 
+    db = get_db()
     document_ref = (
         db.collection(
             "generated_documents",

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from src.core.firebase import db
+from src.core.firebase import get_db
 
 
 
@@ -13,6 +13,7 @@ def store_generated_docxjs_code(
     generated_docxjs_code: str,
 ) -> None:
 
+    db = get_db()
     db.collection(
         "generated_documents",
     ).document(

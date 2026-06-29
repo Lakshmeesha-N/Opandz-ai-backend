@@ -1,9 +1,10 @@
 # src/agents/document_generation_agent/helpers/firestore_loader.py
 
-from src.core.firebase import db
+from src.core.firebase import get_db
 
 def get_intake_session(session_id: str) -> dict:
     """Fetch an intake session document by ID."""
+    db = get_db()
     doc = (
         db.collection("intake_sessions")
         .document(session_id)
@@ -18,6 +19,7 @@ def get_intake_session(session_id: str) -> dict:
 
 def get_template(template_id: str) -> dict:
     """Fetch a template document by ID."""
+    db = get_db()
     doc = (
         db.collection("templates")
         .document(template_id)

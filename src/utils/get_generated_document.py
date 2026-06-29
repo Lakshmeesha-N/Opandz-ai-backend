@@ -1,10 +1,11 @@
-from src.core.firebase import db
+from src.core.firebase import get_db
 
 
 def get_generated_document(
     document_id: str,
 ) -> dict | None:
 
+    db = get_db()
     document = (
         db.collection(
             "generated_documents",

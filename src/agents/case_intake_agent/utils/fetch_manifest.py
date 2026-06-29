@@ -1,7 +1,7 @@
 # src/agents/case_intake_agent/utils/fetch_manifest.py
 
 import asyncio
-from src.core.firebase import db
+from src.core.firebase import get_db
 
 
 async def get_field_manifest(
@@ -15,6 +15,7 @@ async def get_field_manifest(
     """
 
     def _fetch():
+        db = get_db()
         doc = (
             db.collection("templates")
             .document(template_id)

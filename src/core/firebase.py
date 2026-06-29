@@ -137,13 +137,54 @@ def get_storage():
     )
 
 
-# Lazy-initialized globals (avoid heavy work at import time)
+# Module-level globals — initialized immediately so that
+# ``from src.core.firebase import db`` always yields a live client.
 db = None
 bucket = None
 
+
 def ensure_globals():
+    """Populate the module-level ``db`` and ``bucket`` singletons.
+
+    Safe to call multiple times; subsequent calls are no-ops once the
+    clients have been created.
+    """
     global db, bucket
     if db is None:
         db = get_firestore()
     if bucket is None:
-        bucket = get_storage()
+        bucket = get_storage()
+
+
+def get_db():
+    """Return the live Firestore client, initializing it if necessary.
+
+    Prefer this over importing ``db`` directly because Python's module
+    import caches the *value* at import time.  If ``db`` is still None
+    when the importing module is first loaded (e.g. during unit tests or
+    if the app starts before Firebase initializes), the cached reference
+    stays None forever.  Calling ``get_db()`` always returns the current
+    value after ensuring initialization has occurred.
+    """
+    ensure_globals()
+    if db is None:
+        raise RuntimeError(
+            "Firestore client could not be initialized. "
+            "Check Firebase credentials / environment configuration."
+        )
+    return db
+
+
+def get_bucket():
+    """Return the live Firebase Storage bucket, initializing it if necessary.
+
+    Same rationale as ``get_db()``.  Returns None in local/test mode where
+    storage is not available.
+    """
+    ensure_globals()
+    return bucket
+
+
+# Initialize eagerly so any ``from src.core.firebase import db`` import
+# receives a live Firestore client rather than None.
+ensure_globals()

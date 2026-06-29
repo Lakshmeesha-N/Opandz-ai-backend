@@ -1,6 +1,5 @@
 # src/agents/case_intake_agent/utils/session_storage.py
-from firebase_admin import firestore
-from src.core.firebase import db
+from src.core.firebase import get_db
 
 
 
@@ -20,8 +19,7 @@ def save_intake_session(
 
     """
 
-
-
+    db = get_db()
     db.collection(
 
         "intake_sessions"

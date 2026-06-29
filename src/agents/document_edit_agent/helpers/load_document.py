@@ -2,7 +2,7 @@
 
 import asyncio
 
-from src.core.firebase import db
+from src.core.firebase import get_db
 
 from src.agents.document_edit_agent.helpers.docs_config_cleaner import (
     build_llm_document_context,
@@ -52,6 +52,7 @@ def _load_generated_document(
     template_id: str,
 ) -> dict:
 
+    db = get_db()
     document_ref = (
         db.collection(
             "generated_documents",
@@ -83,6 +84,7 @@ def _load_template(
     template_id: str,
 ) -> dict:
 
+    db = get_db()
     template_ref = (
         db.collection(
             "templates",
