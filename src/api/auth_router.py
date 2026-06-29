@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.auth.firebase_auth import CurrentUser, get_current_user
-from src.core.firebase import db, ensure_globals, get_firestore
+from src.core.firebase import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -34,15 +34,8 @@ def _get_or_create_user(uid: str, email: str | None, display_name: str | None) -
     - Existing users that pre-date the plan field are silently backfilled to
       ``plan="free"`` so every profile always has the field present.
     """
-    # Guard: re-initialize if the module-level db is still None.
-    _db = db
-    if _db is None:
-        ensure_globals()
-        from src.core.firebase import db as _db  # re-import after init
-        if _db is None:
-            raise RuntimeError("Firestore client could not be initialized.")
-
-    user_ref = _db.collection("users").document(uid)
+    db = get_db()
+    user_ref = db.collection("users").document(uid)
     doc = user_ref.get()
 
     now = datetime.now(timezone.utc)

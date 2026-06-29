@@ -185,6 +185,7 @@ def get_bucket():
     return bucket
 
 
-# Initialize eagerly so any ``from src.core.firebase import db`` import
-# receives a live Firestore client rather than None.
-ensure_globals()
+# Eager initialization removed to prevent import-time credential resolution.
+# Callers must use get_db() or get_bucket() to ensure lazy initialization.
+# ensure_globals()
+
