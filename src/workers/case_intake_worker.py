@@ -110,11 +110,13 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     try:
         from src.core.config import settings
-        redis_conn = Redis.from_url(settings.redis_url)
 
-        # Start health server in background thread
+        # Start health server FIRST so Cloud Run health-check always succeeds
+        # even if Redis/RQ startup is slow.
         threading.Thread(target=run_health_server, daemon=True).start()
         logging.info("intake-worker: health server running, starting RQ worker...")
+
+        redis_conn = Redis.from_url(settings.redis_url)
 
         # Run RQ worker on main thread
         worker = Worker(["intake"], connection=redis_conn)

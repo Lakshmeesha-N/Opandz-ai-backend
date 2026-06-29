@@ -143,9 +143,18 @@ def run_health_server():
     server.serve_forever()
 
 if __name__ == "__main__":
-    redis_conn = Redis.from_url(os.environ["REDIS_URL"])
-    threading.Thread(target=run_health_server, daemon=True).start()
-    logging.info("Health server running, starting RQ worker...")
-    worker = Worker(["document_edit"], connection=redis_conn)
-    worker.work()
+    logging.basicConfig(level=logging.INFO)
+    try:
+        from src.core.config import settings
+        redis_conn = Redis.from_url(settings.redis_url)
 
+        # Start health server FIRST so Cloud Run health-check always succeeds
+        # even if Redis/RQ startup is slow.
+        threading.Thread(target=run_health_server, daemon=True).start()
+        logging.info("document-edit-worker: health server running, starting RQ worker...")
+
+        # Run RQ worker on main thread
+        worker = Worker(["document_edit"], connection=redis_conn)
+        worker.work()
+    except Exception:
+        logging.exception("document-edit-worker: worker crashed")
