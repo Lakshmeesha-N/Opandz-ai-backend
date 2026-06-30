@@ -54,6 +54,16 @@ def generate_field_manifest_node(state: AgentState) -> AgentState:
         else:
             field_manifest_str = getattr(response, "content", response)
 
+        # If response content is a list (e.g. list of content blocks or strings from some LangChain wrappers)
+        if isinstance(field_manifest_str, list):
+            parts = []
+            for part in field_manifest_str:
+                if isinstance(part, str):
+                    parts.append(part)
+                elif isinstance(part, dict) and "text" in part:
+                    parts.append(part["text"])
+            field_manifest_str = "".join(parts)
+
         # Parse JSON and clean any LLM markdown wrappers
         import re
         cleaned = re.sub(r"^```json\s*", "", field_manifest_str.strip(), flags=re.IGNORECASE)

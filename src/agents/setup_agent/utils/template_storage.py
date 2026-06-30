@@ -23,6 +23,30 @@ def _submit_background(fn, *args, **kwargs):
     fut.add_done_callback(_cb)
 
 
+def sanitize_keys(data: Any) -> Any:
+    """Recursively replace characters in dict keys that are invalid in Firestore."""
+    if isinstance(data, dict):
+        new_dict = {}
+        for k, v in data.items():
+            # Replace invalid characters: . , / \ [ ] *
+            new_key = (
+                str(k)
+                .replace(".", "_")
+                .replace("/", "_")
+                .replace("\\", "_")
+                .replace("[", "_")
+                .replace("]", "_")
+                .replace("*", "_")
+            )
+            if not new_key:
+                new_key = "empty_key"
+            new_dict[new_key] = sanitize_keys(v)
+        return new_dict
+    elif isinstance(data, list):
+        return [sanitize_keys(x) for x in data]
+    return data
+
+
 def save_template(
     template_id: str,
     lawyer_id: str,
@@ -39,10 +63,12 @@ def save_template(
     firebase.ensure_globals()
     db = firebase.db
 
+    sanitized_blueprint = sanitize_keys(blueprint)
+
     document_data = {
         "template_id": template_id,
         "lawyer_id": lawyer_id,
-        "blueprint": blueprint,
+        "blueprint": sanitized_blueprint,
     }
 
     def _do_set():
