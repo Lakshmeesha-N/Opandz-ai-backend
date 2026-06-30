@@ -2,11 +2,14 @@
 
 import json
 import asyncio
+import logging
 
 from typing import Annotated
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
+
+logger = logging.getLogger(__name__)
 
 
 @tool
@@ -20,6 +23,7 @@ async def validate_docxjs(
     temp_file_path = state[
         "temp_file_path"
     ]
+    logger.info("[validate_docxjs] Validating file: %s", temp_file_path)
 
     process = await asyncio.create_subprocess_exec(
         "node",
@@ -32,11 +36,13 @@ async def validate_docxjs(
     stdout, stderr = await process.communicate()
 
     if process.returncode != 0:
-
+        err_msg = stderr.decode()
+        logger.error("[validate_docxjs] Validation failed for file %s. Error: %s", temp_file_path, err_msg)
         raise ValueError(
-            stderr.decode(),
+            err_msg,
         )
 
+    logger.info("[validate_docxjs] Validation passed successfully for file: %s", temp_file_path)
     return json.loads(
         stdout.decode(),
     )

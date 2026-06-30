@@ -2,10 +2,13 @@
 
 import json
 import asyncio
+import logging
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from typing import Annotated
+
+logger = logging.getLogger(__name__)
 
 
 @tool
@@ -21,6 +24,7 @@ async def replace_function_code(
     temp_file_path = state[
         "temp_file_path"
     ]
+    logger.info("[replace_function_code] Replacing function %s in file: %s", function_name, temp_file_path)
 
     process = await asyncio.create_subprocess_exec(
         "node",
@@ -35,11 +39,13 @@ async def replace_function_code(
     stdout, stderr = await process.communicate()
 
     if process.returncode != 0:
-
+        err_msg = stderr.decode()
+        logger.error("[replace_function_code] Failed to replace function %s. Error: %s", function_name, err_msg)
         raise ValueError(
-            stderr.decode(),
+            err_msg,
         )
 
+    logger.info("[replace_function_code] Successfully replaced function %s", function_name)
     return json.loads(
         stdout.decode(),
     )

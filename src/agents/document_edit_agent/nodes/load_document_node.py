@@ -1,6 +1,7 @@
 # src/agents/document_edit_agent/nodes/load_document_node.py
 
 import tempfile
+import logging
 
 from src.agents.document_edit_agent.schema.global_state import (
     AgentState,
@@ -10,17 +11,19 @@ from src.agents.document_edit_agent.helpers.load_document import (
     load_document,
 )
 
+logger = logging.getLogger(__name__)
+
 
 async def load_document_node(
     state: AgentState,
 ) -> AgentState:
 
     try:
+        template_id = state.get("template_id")
+        logger.info("[load_document_node] START: loading template_id=%s", template_id)
 
         document = await load_document(
-            template_id=state[
-                "template_id"
-            ],
+            template_id=template_id,
         )
 
         temp_file = tempfile.NamedTemporaryFile(
@@ -37,6 +40,7 @@ async def load_document_node(
         )
 
         temp_file.close()
+        logger.info("[load_document_node] SUCCESS: loaded docxjs code and saved to temp_file=%s", temp_file.name)
 
         return {
             **state,
@@ -51,7 +55,7 @@ async def load_document_node(
         }
 
     except Exception as e:
-
+        logger.exception("[load_document_node] ERROR: %s", str(e))
         return {
             **state,
             "error": str(

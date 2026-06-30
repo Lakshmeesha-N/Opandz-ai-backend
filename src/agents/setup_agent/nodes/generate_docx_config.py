@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 
 from src.core.config import settings
@@ -14,6 +15,8 @@ from src.agents.setup_agent.utils.template_storage import (
 )
 from src.llm.llm import get_llm
 
+logger = logging.getLogger(__name__)
+
 
 def generate_docx_config(state: AgentState) -> AgentState:
     """
@@ -21,13 +24,13 @@ def generate_docx_config(state: AgentState) -> AgentState:
     """
 
     try:
-        print("[generate_docx_config] START", {k: state.get(k) for k in ("template_id",)})
+        logger.info("[generate_docx_config] START: template_id=%s", state.get("template_id"))
 
         blueprint = state["docx_blueprint"]
         # If blueprint was stored as a list (templates/... json stores sections as list),
         # unwrap the first element to preserve original blueprint structure.
         if isinstance(blueprint, list):
-            print("[generate_docx_config] Unwrapping blueprint list -> using first element")
+            logger.info("[generate_docx_config] Unwrapping blueprint list -> using first element")
             blueprint = blueprint[0]
 
         # Simplify blueprint for LLM
@@ -63,8 +66,8 @@ def generate_docx_config(state: AgentState) -> AgentState:
             document_config=document_config
         )
 
-        print("[generate_docx_config] END", {"template_id": template_id})
+        logger.info("[generate_docx_config] END: template_id=%s", template_id)
         return {}
     except Exception as e:
-        print("[generate_docx_config] ERROR", str(e))
+        logger.exception("[generate_docx_config] ERROR: %s", str(e))
         return {"generate_docx_config_error": str(e)}

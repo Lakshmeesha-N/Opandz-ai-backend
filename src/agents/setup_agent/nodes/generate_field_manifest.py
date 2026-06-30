@@ -1,6 +1,7 @@
 # src/agents/setup_agent/nodes/generate_field_manifest.py
 
 import json
+import logging
 from pathlib import Path
 
 from src.core.config import settings
@@ -20,6 +21,8 @@ from src.agents.setup_agent.utils.template_storage import (
 
 from src.llm.llm import get_llm
 
+logger = logging.getLogger(__name__)
+
 
 def generate_field_manifest_node(state: AgentState) -> AgentState:
     """
@@ -27,12 +30,12 @@ def generate_field_manifest_node(state: AgentState) -> AgentState:
     """
 
     try:
-        print("[generate_field_manifest] START", {k: state.get(k) for k in ("template_id",)})
+        logger.info("[generate_field_manifest] START: template_id=%s", state.get("template_id"))
 
         blueprint = state["docx_blueprint"]
         # If blueprint was stored as a list, unwrap the first element.
         if isinstance(blueprint, list):
-            print("[generate_field_manifest] Unwrapping blueprint list -> using first element")
+            logger.info("[generate_field_manifest] Unwrapping blueprint list -> using first element")
             blueprint = blueprint[0]
 
         # Convert full blueprint into simplified LLM-friendly structure
@@ -67,8 +70,8 @@ def generate_field_manifest_node(state: AgentState) -> AgentState:
             field_manifest=field_manifest
         )
 
-        print("[generate_field_manifest] END", {"template_id": template_id})
+        logger.info("[generate_field_manifest] END: template_id=%s", template_id)
         return {}
     except Exception as e:
-        print("[generate_field_manifest] ERROR", str(e))
+        logger.exception("[generate_field_manifest] ERROR: %s", str(e))
         return {"generate_field_manifest_error": str(e)}

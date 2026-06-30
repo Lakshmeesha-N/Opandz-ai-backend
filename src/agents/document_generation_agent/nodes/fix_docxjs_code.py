@@ -1,5 +1,6 @@
 # src/agents/document_generation_agent/nodes/fix_docxjs_code.py
 
+import logging
 from src.agents.document_generation_agent.schema.global_state import (
     AgentState,
 )
@@ -12,20 +13,22 @@ from src.agents.document_generation_agent.prompts.fix_docxjs_code_prompt import 
     create_fix_docxjs_code_prompt,
 )
 
+logger = logging.getLogger(__name__)
+
 
 async def fix_docxjs_code(
     state: AgentState,
 ) -> AgentState:
 
     try:
+        validation_error = state.get("error")
+        logger.info("[fix_docxjs_code] START: attempting to fix code after error: %s", validation_error)
 
         prompt = create_fix_docxjs_code_prompt(
             generated_code=state[
                 "generated_docxjs_code"
             ],
-            validation_error=state[
-                "error"
-            ],
+            validation_error=validation_error,
         )
 
         llm = get_llm()
@@ -40,6 +43,7 @@ async def fix_docxjs_code(
             str(response),
         )
 
+        logger.info("[fix_docxjs_code] SUCCESS: generated fixed code size: %d characters", len(fixed_code))
         return {
             **state,
             "generated_docxjs_code": fixed_code,
@@ -47,7 +51,7 @@ async def fix_docxjs_code(
         }
 
     except Exception as e:
-
+        logger.exception("[fix_docxjs_code] ERROR: %s", str(e))
         return {
             **state,
             "error": str(e),

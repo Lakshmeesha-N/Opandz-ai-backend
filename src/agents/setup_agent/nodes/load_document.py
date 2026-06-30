@@ -1,7 +1,10 @@
 # load_document.py
 
 import os
+import logging
 from src.agents.setup_agent.schema.global_state import AgentState
+
+logger = logging.getLogger(__name__)
 
 
 def load_document(state: AgentState) -> AgentState:
@@ -9,12 +12,13 @@ def load_document(state: AgentState) -> AgentState:
     Validate uploaded file and detect document type.
     """
 
-    print("[load_document] START", {k: state.get(k) for k in ("file_path", "template_id")})
+    logger.info("[load_document] START: file_path=%s, template_id=%s", state.get("file_path"), state.get("template_id"))
 
     file_path = state["file_path"]
 
     # Check file exists in temp storage
     if not os.path.exists(file_path):
+        logger.error("[load_document] Uploaded file not found at: %s", file_path)
         return {
             **state,
             "error": "Uploaded file not found"
@@ -30,6 +34,7 @@ def load_document(state: AgentState) -> AgentState:
         file_type = "pdf"
 
     else:
+        logger.error("[load_document] Unsupported file type: %s", extension)
         return {
             **state,
             "error": f"Unsupported file type: {extension}"
@@ -39,5 +44,5 @@ def load_document(state: AgentState) -> AgentState:
         "file_type": file_type,
         "error": None,
     }
-    print("[load_document] END", result)
+    logger.info("[load_document] END: file_type=%s", file_type)
     return result

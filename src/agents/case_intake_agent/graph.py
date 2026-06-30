@@ -1,5 +1,6 @@
 # src/agents/case_intake_agent/graph.py
 
+import logging
 from langgraph.graph import (
     StateGraph,
     START,
@@ -38,6 +39,8 @@ from src.agents.case_intake_agent.nodes.save_session_state import (
     save_session_state,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def has_uploaded_files(
     state: AgentState,
@@ -49,8 +52,10 @@ def has_uploaded_files(
     )
 
     if uploaded_files:
+        logger.info("[has_uploaded_files] Routing to extract_evidence (found files)")
         return "extract_evidence"
 
+    logger.info("[has_uploaded_files] Routing to map_evidence_to_fields (no files)")
     return "map_evidence_to_fields"
 
 
@@ -58,10 +63,12 @@ def route_next_action(
     state: AgentState,
 ) -> str:
 
-    return state.get(
+    next_action = state.get(
         "next_action",
         "ask_question",
     )
+    logger.info("[route_next_action] Routing to next action: %s", next_action)
+    return next_action
 
 
 graph_builder = StateGraph(

@@ -1,5 +1,7 @@
 # src/agents/case_intake_agent/nodes/extract_evidence.py
 
+import logging
+
 from src.agents.case_intake_agent.schema.global_state import (
     AgentState,
 )
@@ -7,6 +9,8 @@ from src.agents.case_intake_agent.schema.global_state import (
 from src.agents.case_intake_agent.helpers.extract_all_evidence import (
     extract_all_evidence,
 )
+
+logger = logging.getLogger(__name__)
 
 
 async def extract_evidence(
@@ -29,11 +33,15 @@ async def extract_evidence(
             [],
         )
 
+        logger.info("[extract_evidence] START: processing %d files", len(uploaded_files))
+
         extracted_evidence = (
             await extract_all_evidence(
                 uploaded_files
             )
         )
+
+        logger.info("[extract_evidence] SUCCESS: extracted evidence from %d files", len(uploaded_files))
 
         return {
             **state,
@@ -42,6 +50,8 @@ async def extract_evidence(
         }
 
     except Exception as e:
+
+        logger.exception("[extract_evidence] ERROR: %s", str(e))
 
         return {
             **state,
