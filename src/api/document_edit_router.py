@@ -91,10 +91,25 @@ async def start_document_edit(
                     detail="The selected document exceeds the maximum supported size (1 MB)."
                 )
 
-            temp_file_path = temp_dir / filename
-            with open(temp_file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-            uploaded_files.append(str(temp_file_path.absolute()))
+            file_bytes = await file.read()
+            gcs_path = f"uploads/document_edit/{current_user.uid}/{template_id}/{filename}"
+            try:
+                from src.core import firebase
+                firebase.ensure_globals()
+                bucket = firebase.bucket
+                if bucket is None:
+                    raise RuntimeError("Firebase Storage bucket is not initialized.")
+                blob = bucket.blob(gcs_path)
+                blob.upload_from_string(
+                    file_bytes,
+                    content_type=file.content_type or "application/octet-stream"
+                )
+                gcs_uri = f"gs://{bucket.name}/{gcs_path}"
+                uploaded_files.append(gcs_uri)
+                logging.info("Uploaded document edit file to Firebase Storage: %s", gcs_uri)
+            except Exception as e:
+                logging.exception("Failed to upload file to Firebase Storage")
+                raise HTTPException(status_code=500, detail=f"Failed to upload file to storage: {e}")
 
     payload = {
         "template_id": template_id,
