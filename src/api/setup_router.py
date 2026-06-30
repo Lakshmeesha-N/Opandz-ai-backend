@@ -2,7 +2,6 @@
 
 import uuid
 import logging
-import shutil
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -25,12 +24,14 @@ router = APIRouter(
     tags=["setup-agent"],
 )
 
+logger = logging.getLogger(__name__)
+
 # In-process fallback job store (used when Redis is unavailable)
 JOBS: Dict[str, Dict[str, Any]] = {}
 
 
 @router.post("/", status_code=202)
-def start_setup(
+async def start_setup(
     background_tasks: BackgroundTasks,
     vault_name: str = Form(...),
     template_name: str = Form(...),
@@ -71,18 +72,34 @@ def start_setup(
             detail="The selected document exceeds the maximum supported size (1 MB)."
         )
 
-    # Save to temporary path
-    temp_dir = Path("temp")
-    temp_dir.mkdir(exist_ok=True)
-    temp_file_path = temp_dir / filename
-    with open(temp_file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    # Upload file to Firebase Storage organized by user
+    # Path: uploads/setup/{lawyer_id}/{template_id}/{filename}
+    file_bytes = await file.read()
+    template_id_val = template_id or str(uuid.uuid4())
+    gcs_path = f"uploads/setup/{current_user.uid}/{template_id_val}/{filename}"
+
+    try:
+        from src.core import firebase
+        firebase.ensure_globals()
+        bucket = firebase.bucket
+        if bucket is None:
+            raise RuntimeError("Firebase Storage bucket is not initialized.")
+        blob = bucket.blob(gcs_path)
+        blob.upload_from_string(
+            file_bytes,
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        gcs_uri = f"gs://{bucket.name}/{gcs_path}"
+        logger.info("Uploaded file to Firebase Storage: %s", gcs_uri)
+    except Exception as e:
+        logger.exception("Failed to upload file to Firebase Storage")
+        raise HTTPException(status_code=500, detail=f"Failed to upload file to storage: {e}")
 
     payload = {
-        "file_path": str(temp_file_path.absolute()),
+        "file_path": gcs_uri,
         "vault_name": vault_name,
         "template_name": template_name,
-        "template_id": template_id or "",
+        "template_id": template_id_val,
         "lawyer_id": current_user.uid,
     }
 

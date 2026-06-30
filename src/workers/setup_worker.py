@@ -118,37 +118,33 @@ if __name__ == "__main__":
     logging.info("setup-worker: health server bound to port %s", os.environ.get("PORT", "8080"))
 
     try:
-        # ── Step 2: heavy imports (firebase, agent graph) ───────────────────
-        logging.info("setup-worker: [1/6] importing config...")
+        # ── Step 2: Initialize Firebase first ──────────────────────────────────
+        logging.info("setup-worker: [1/4] importing config...")
         from src.core.config import settings  # noqa: E402
 
-        logging.info("setup-worker: [2/6] importing agent graph...")
-        from src.agents.setup_agent.graph import setup_agent_graph  # noqa: F401,E402
-
-        logging.info("setup-worker: [3/6] importing firebase module...")
+        logging.info("setup-worker: [2/4] initializing firebase...")
         from src.core import firebase  # noqa: E402
-
-        logging.info("setup-worker: [4/6] calling firebase.ensure_globals (firestore)...")
-        # Initialize only Firestore first (skip storage to isolate)
         if firebase.db is None:
             firebase.db = firebase.get_firestore()
-        logging.info("setup-worker: [4/6] firestore initialized")
-
-        logging.info("setup-worker: [5/6] calling get_storage...")
+        logging.info("setup-worker: [2/4] firestore ready")
         if firebase.bucket is None:
             firebase.bucket = firebase.get_storage()
-        logging.info("setup-worker: [5/6] storage initialized (bucket=%s)", firebase.bucket)
+        logging.info("setup-worker: firebase initialized (bucket=%s)", firebase.bucket)
 
-        logging.info("setup-worker: firebase initialized")
+        # ── Step 3: Eagerly import the agent graph (warm up cache) ────────────
+        logging.info("setup-worker: [3/4] eagerly importing agent graph for fast execution...")
+        from src.agents.setup_agent.graph import setup_agent_graph  # noqa: F401,E402
+        logging.info("setup-worker: [3/4] agent graph loaded and cached")
 
-        # ── Step 3: connect to Redis ───────────────────────────────────────
-        logging.info("setup-worker: [6/6] connecting to Redis at %s...", settings.redis_url)
+        # ── Step 4: connect to Redis ───────────────────────────────────────
+        logging.info("setup-worker: [4/4] connecting to Redis at %s...", settings.redis_url)
         from redis import Redis  # noqa: E402
         from rq import Worker  # noqa: E402
         redis_conn = Redis.from_url(settings.redis_url)
         logging.info("setup-worker: redis connected")
 
-        # ── Step 4: run RQ worker on main thread ────────────────────────────
+        # ── Step 5: run RQ worker on main thread ────────────────────────────
+        logging.info("setup-worker: starting RQ worker...")
         worker = Worker(["setup"], connection=redis_conn)
         worker.work()
 
