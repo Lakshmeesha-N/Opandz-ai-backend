@@ -199,7 +199,25 @@ def get_status(
     except Exception:
         logging.exception("Failed to read job status from Firestore for job %s", job_id)
 
-    # 2. Fallback: in-memory store (inproc background task path)
+    # 2. Check RQ/Redis directly (if the job is still queued or processing in Redis)
+    try:
+        from src.queues.redis_client import get_redis
+        from rq.job import Job
+        conn = get_redis()
+        if conn:
+            try:
+                job = Job.fetch(job_id, connection=conn)
+                return {
+                    "job_id": job.id,
+                    "status": job.get_status(),  # e.g., "queued", "started", "finished", "failed"
+                    "backend": "rq"
+                }
+            except Exception:
+                pass
+    except Exception:
+        logging.exception("Failed to read job status from Redis for job %s", job_id)
+
+    # 3. Fallback: in-memory store (inproc background task path)
     if job_id in JOBS:
         return JOBS[job_id]
 
