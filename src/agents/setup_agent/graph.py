@@ -29,15 +29,17 @@ def route_document(state: AgentState) -> str:
     """
     Route execution based on document type.
     """
+    if state.get("error"):
+        return "error"
 
-    if state["file_type"] == "docx":
+    if state.get("file_type") == "docx":
         return "docx"
 
-    elif state["file_type"] == "pdf":
+    elif state.get("file_type") == "pdf":
         return "pdf"
 
     raise ValueError(
-        f"Unsupported file type: {state['file_type']}"
+        f"Unsupported file type: {state.get('file_type')}"
     )
 
 
@@ -83,6 +85,7 @@ graph.add_conditional_edges(
     route_document,
     {
         "docx": "extract_docx_blueprint",
+        "error": END,
         # "pdf": "extract_pdf_blueprint"  # add later
     },
 )
