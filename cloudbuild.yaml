@@ -71,11 +71,14 @@ substitutions:
   _API_CPU:              "1"
   _API_MEMORY:           "512Mi"
 
-  # Scaling — Workers (single-threaded RQ workers; more RAM for AI inference)
-  _WORKER_MAX_INSTANCES: "5"
+  # Scaling — Workers (single-threaded RQ workers)
+  _WORKER_MAX_INSTANCES: "3"
   _WORKER_CONCURRENCY:   "1"
-  _WORKER_CPU:           "2"
-  _WORKER_MEMORY:        "2Gi"
+  _WORKER_CPU:           "1"
+  _WORKER_MEMORY:        "1Gi"
+
+  # VPC Connector (for Memorystore Redis access)
+  _VPC_CONNECTOR:        "my-connector"
 
 # =============================================================================
 # OPTIONS
@@ -215,8 +218,10 @@ steps:
       - "--memory=${_WORKER_MEMORY}"
       - "--concurrency=${_WORKER_CONCURRENCY}"
       - "--max-instances=${_WORKER_MAX_INSTANCES}"
+      - "--vpc-connector=${_VPC_CONNECTOR}"
+      - "--vpc-egress=private-ranges-only"
       - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
-      - "--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest"
+      - "--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest,FIREBASE_STORAGE_BUCKET=FIREBASE_STORAGE_BUCKET:latest"
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
@@ -244,8 +249,10 @@ steps:
       - "--memory=${_WORKER_MEMORY}"
       - "--concurrency=${_WORKER_CONCURRENCY}"
       - "--max-instances=${_WORKER_MAX_INSTANCES}"
+      - "--vpc-connector=${_VPC_CONNECTOR}"
+      - "--vpc-egress=private-ranges-only"
       - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
-      - "--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest"
+      - "--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest,FIREBASE_STORAGE_BUCKET=FIREBASE_STORAGE_BUCKET:latest"
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
@@ -273,8 +280,10 @@ steps:
       - "--memory=${_WORKER_MEMORY}"
       - "--concurrency=${_WORKER_CONCURRENCY}"
       - "--max-instances=${_WORKER_MAX_INSTANCES}"
+      - "--vpc-connector=${_VPC_CONNECTOR}"
+      - "--vpc-egress=private-ranges-only"
       - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
-      - "--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest"
+      - "--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest,FIREBASE_STORAGE_BUCKET=FIREBASE_STORAGE_BUCKET:latest"
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------

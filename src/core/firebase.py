@@ -124,10 +124,22 @@ def get_storage():
     The mock is not implemented fully; callers should guard for None when running
     in local/test mode.
     """
+    import logging as _logging
     if _HAS_FIREBASE:
         if settings.firebase_credentials_path or not (settings.allow_firebase_mocks or settings.LOCAL_TEST):
             initialize_firebase()
-            return storage.bucket()
+            bucket_name = settings.firebase_storage_bucket
+            if not bucket_name:
+                proj_id = settings.firebase_project_id or settings.project_id
+                if proj_id:
+                    bucket_name = f"{proj_id}.firebasestorage.app"
+            if not bucket_name:
+                _logging.warning(
+                    "firebase.get_storage: FIREBASE_STORAGE_BUCKET is not set and "
+                    "project_id is unknown — storage bucket unavailable."
+                )
+                return None
+            return storage.bucket(bucket_name)
 
     if settings.allow_firebase_mocks or settings.LOCAL_TEST:
         return None

@@ -4,7 +4,6 @@ from typing import Any
 from concurrent.futures import ThreadPoolExecutor
 import logging
 
-from src.core import firebase
 from src.core.config import settings
 
 
@@ -35,6 +34,7 @@ def save_template(
     test / dev flows can observe files immediately; otherwise the write is
     scheduled on a background thread and this function returns immediately.
     """
+    from src.core import firebase  # lazy import — avoids GCS connection at module load
 
     firebase.ensure_globals()
     db = firebase.db
@@ -59,6 +59,8 @@ def save_document_config(
     document_config: Any,
 ) -> None:
     """Save document config to template (backgrounded similarly to `save_template`)."""
+    from src.core import firebase  # lazy import
+
     firebase.ensure_globals()
     db = firebase.db
 
@@ -80,6 +82,8 @@ def save_field_manifest(
     field_manifest: Any,
 ) -> None:
     """Store generated field manifest inside an existing template document (backgrounded)."""
+    from src.core import firebase  # lazy import
+
     firebase.ensure_globals()
     db = firebase.db
 
