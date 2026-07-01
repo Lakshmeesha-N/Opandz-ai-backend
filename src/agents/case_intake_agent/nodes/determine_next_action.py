@@ -17,6 +17,9 @@ def determine_next_action(
             - ready_to_generate
     """
 
+    if state.get("error"):
+        return state
+
     try:
 
         completion_percentage = state.get(
@@ -44,8 +47,8 @@ def determine_next_action(
         return {
             **state,
             "next_action": next_action,
-            "error": None,
         }
+
 
     except Exception as e:
 

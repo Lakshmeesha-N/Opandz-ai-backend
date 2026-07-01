@@ -15,6 +15,9 @@ def calculate_completion(
     - ready_to_generate
     """
 
+    if state.get("error"):
+        return state
+
     try:
 
         field_manifest = state.get(
@@ -81,8 +84,8 @@ def calculate_completion(
             ),
             "missing_fields": missing_fields,
             "ready_to_generate": ready_to_generate,
-            "error": None,
         }
+
 
     except Exception as e:
 

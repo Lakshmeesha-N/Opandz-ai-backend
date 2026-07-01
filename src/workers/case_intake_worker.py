@@ -71,18 +71,23 @@ def run_intake_graph(payload: Dict[str, Any]):
         result = asyncio.run(case_intake_graph.ainvoke(initial_state))
 
         if job_id and db:
+            error_val = result.get("error")
+            status = "failed" if error_val else "completed"
             job_result = {k: v for k, v in result.items() if k not in ("blueprint", "docx_blueprint")}
             from src.agents.setup_agent.utils.template_storage import sanitize_keys
             sanitized_result = sanitize_keys(job_result)
-            db.collection("jobs").document(job_id).update(
-                {
-                    "status": "completed",
-                    "result": sanitized_result,
-                    "next_question": result.get("next_question"),
-                    "completion_percentage": result.get("completion_percentage", 0.0),
-                    "ready_to_generate": result.get("ready_to_generate", False),
-                }
-            )
+            
+            update_data = {
+                "status": status,
+                "result": sanitized_result,
+                "next_question": result.get("next_question"),
+                "completion_percentage": result.get("completion_percentage", 0.0),
+                "ready_to_generate": result.get("ready_to_generate", False),
+            }
+            if error_val:
+                update_data["error"] = error_val
+                
+            db.collection("jobs").document(job_id).update(update_data)
 
         return result
 

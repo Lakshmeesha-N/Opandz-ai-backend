@@ -21,6 +21,9 @@ async def map_evidence_to_fields(
     to the field manifest and updates case_data.
     """
 
+    if state.get("error"):
+        return state
+
     try:
 
         field_manifest = state["field_manifest"]
@@ -77,8 +80,8 @@ async def map_evidence_to_fields(
         return {
             **state,
             "case_data": current_case_data,
-            "error": None,
         }
+
 
     except Exception as e:
 

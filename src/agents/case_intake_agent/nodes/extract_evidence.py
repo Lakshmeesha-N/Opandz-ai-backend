@@ -26,6 +26,9 @@ async def extract_evidence(
         state["extracted_evidence"]
     """
 
+    if state.get("error"):
+        return state
+
     try:
 
         uploaded_files = state.get(

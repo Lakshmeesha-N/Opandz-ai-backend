@@ -49,7 +49,15 @@ async def save_session_state(
             "next_question": state.get(
                 "next_question",
             ),
+            "missing_fields": state.get(
+                "missing_fields",
+                [],
+            ),
+            "error": state.get(
+                "error",
+            ),
         }
+
 
         await asyncio.to_thread(
             save_intake_session,
@@ -57,10 +65,8 @@ async def save_session_state(
             document_data,
         )
 
-        return {
-            **state,
-            "error": None,
-        }
+        return state
+
 
     except Exception as e:
 

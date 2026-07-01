@@ -19,6 +19,9 @@ async def generate_followup_question(
     from the missing fields.
     """
 
+    if state.get("error"):
+        return state
+
     try:
 
         missing_fields = state.get(
@@ -31,7 +34,6 @@ async def generate_followup_question(
             return {
                 **state,
                 "next_question": None,
-                "error": None,
             }
 
         prompt = create_followup_question_prompt(
@@ -54,8 +56,8 @@ async def generate_followup_question(
         return {
             **state,
             "next_question": next_question,
-            "error": None,
         }
+
 
     except Exception as e:
 
