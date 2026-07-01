@@ -102,6 +102,14 @@ class SharedLLM:
                         continue
                     try:
                         res = self._call_client(prompt)
+                        if res and hasattr(res, "content") and isinstance(res.content, list):
+                            text_parts = []
+                            for part in res.content:
+                                if isinstance(part, dict):
+                                    text_parts.append(part.get("text", ""))
+                                else:
+                                    text_parts.append(str(part))
+                            res.content = "".join(text_parts)
                         fut.set_result(res)
                     except Exception as e:
                         fut.set_exception(e)

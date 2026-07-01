@@ -61,9 +61,19 @@ async def map_evidence_to_fields(
             else str(response)
         )
 
+        cleaned_content = content.strip()
+        if cleaned_content.startswith("```json"):
+            cleaned_content = cleaned_content[7:]
+        elif cleaned_content.startswith("```"):
+            cleaned_content = cleaned_content[3:]
+        if cleaned_content.endswith("```"):
+            cleaned_content = cleaned_content[:-3]
+        cleaned_content = cleaned_content.strip()
+
         extracted_fields = json.loads(
-            content
+            cleaned_content
         )
+
 
         # Only update fields that
         # already exist in case_data
