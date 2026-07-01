@@ -156,13 +156,6 @@ def _run_graph_inproc(
             or str(uuid.uuid4())
         )
 
-        create_template_registry_entry(
-            template_id=template_id,
-            lawyer_id=payload["lawyer_id"],
-            vault_name=payload["vault_name"],
-            template_name=payload["template_name"],
-        )
-
         initial_state: AgentState = {
             "file_path": payload["file_path"],
             "file_type": None,
@@ -175,6 +168,13 @@ def _run_graph_inproc(
 
         result = setup_agent_graph.invoke(
             initial_state,
+        )
+
+        create_template_registry_entry(
+            template_id=template_id,
+            lawyer_id=payload["lawyer_id"],
+            vault_name=payload["vault_name"],
+            template_name=payload["template_name"],
         )
 
         JOBS[job_id]["status"] = "completed"

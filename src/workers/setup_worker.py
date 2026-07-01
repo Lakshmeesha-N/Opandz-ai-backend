@@ -65,6 +65,18 @@ def run_graph(payload: Dict[str, Any]):
 
         result = setup_agent_graph.invoke(initial_state)
 
+        # Store the template registry entry upon successful completion of the setup graph
+        try:
+            from src.utils.create_template_registry_entry import create_template_registry_entry
+            create_template_registry_entry(
+                template_id=payload.get("template_id", ""),
+                lawyer_id=payload.get("lawyer_id", ""),
+                vault_name=payload.get("vault_name", ""),
+                template_name=payload.get("template_name", ""),
+            )
+        except Exception:
+            logging.exception("Failed to write template registry entry on success")
+
         if job_id and db:
             # Strip heavy blueprint fields from result to prevent redundancy & size limits in jobs collection
             job_result = {k: v for k, v in result.items() if k not in ("docx_blueprint", "pdf_blueprint")}
