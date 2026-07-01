@@ -36,6 +36,7 @@ async def generate_followup_question(
 
         prompt = create_followup_question_prompt(
             missing_fields=missing_fields,
+            user_message=state.get("user_message", ""),
         )
 
         llm = get_llm()
