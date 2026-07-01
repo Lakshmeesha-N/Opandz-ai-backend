@@ -30,7 +30,7 @@ def run_intake_graph(payload: Dict[str, Any]):
     """
     from rq import get_current_job
     from src.core import firebase
-    from src.agents.case_intake_agent.graph import graph as case_intake_graph
+    from src.orchestrators.document_orchestrator import document_orchestrator
     from src.utils.cleanup import cleanup_temp_file
 
     job = get_current_job()
@@ -68,7 +68,8 @@ def run_intake_graph(payload: Dict[str, Any]):
         }
 
         import asyncio
-        result = asyncio.run(case_intake_graph.ainvoke(initial_state))
+        result = asyncio.run(document_orchestrator.run(initial_state))
+
 
         if job_id and db:
             error_val = result.get("error")

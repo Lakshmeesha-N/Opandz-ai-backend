@@ -30,10 +30,6 @@ async def save_session_state(
             "template_id": state.get(
                 "template_id"
             ),
-            "field_manifest": state.get(
-                "field_manifest",
-                {},
-            ),
             "case_data": state.get(
                 "case_data",
                 {},
@@ -53,10 +49,9 @@ async def save_session_state(
                 "missing_fields",
                 [],
             ),
-            "error": state.get(
-                "error",
-            ),
         }
+
+
 
 
         await asyncio.to_thread(
