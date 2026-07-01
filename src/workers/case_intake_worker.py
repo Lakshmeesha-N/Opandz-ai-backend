@@ -67,7 +67,8 @@ def run_intake_graph(payload: Dict[str, Any]):
             "next_question": None,
         }
 
-        result = case_intake_graph.invoke(initial_state)
+        import asyncio
+        result = asyncio.run(case_intake_graph.ainvoke(initial_state))
 
         if job_id and db:
             job_result = {k: v for k, v in result.items() if k not in ("blueprint", "docx_blueprint")}
