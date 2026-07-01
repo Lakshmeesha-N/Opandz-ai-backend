@@ -28,8 +28,8 @@ def calculate_completion(
         )
 
         fields = field_manifest.get(
-            "fields",
-            [],
+            "required_fields",
+            field_manifest.get("fields", []),
         )
 
         total_fields = len(fields)

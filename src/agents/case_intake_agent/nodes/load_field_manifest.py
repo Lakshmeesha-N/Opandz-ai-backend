@@ -24,8 +24,8 @@ async def load_field_manifest(
         case_data = {}
 
         fields = field_manifest.get(
-            "fields",
-            []
+            "required_fields",
+            field_manifest.get("fields", [])
         )
 
         for field in fields:
