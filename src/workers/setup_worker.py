@@ -66,8 +66,10 @@ def run_graph(payload: Dict[str, Any]):
         result = setup_agent_graph.invoke(initial_state)
 
         if job_id and db:
+            # Strip heavy blueprint fields from result to prevent redundancy & size limits in jobs collection
+            job_result = {k: v for k, v in result.items() if k not in ("docx_blueprint", "pdf_blueprint")}
             from src.agents.setup_agent.utils.template_storage import sanitize_keys
-            sanitized_result = sanitize_keys(result)
+            sanitized_result = sanitize_keys(job_result)
             db.collection("jobs").document(job_id).update(
                 {"status": "completed", "result": sanitized_result}
             )

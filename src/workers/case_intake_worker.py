@@ -70,8 +70,9 @@ def run_intake_graph(payload: Dict[str, Any]):
         result = case_intake_graph.invoke(initial_state)
 
         if job_id and db:
+            job_result = {k: v for k, v in result.items() if k not in ("blueprint", "docx_blueprint")}
             from src.agents.setup_agent.utils.template_storage import sanitize_keys
-            sanitized_result = sanitize_keys(result)
+            sanitized_result = sanitize_keys(job_result)
             db.collection("jobs").document(job_id).update(
                 {"status": "completed", "result": sanitized_result}
             )

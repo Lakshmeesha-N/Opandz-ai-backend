@@ -47,8 +47,13 @@ def update_job_in_firestore(job_id: str, status: str, result: Any = None, error:
         try:
             update_data = {"status": status}
             if result is not None:
+                # Strip heavy blueprint fields to prevent redundancy in jobs collection
+                if isinstance(result, dict):
+                    job_result = {k: v for k, v in result.items() if k not in ("blueprint", "docx_blueprint")}
+                else:
+                    job_result = result
                 from src.agents.setup_agent.utils.template_storage import sanitize_keys
-                update_data["result"] = sanitize_keys(result)
+                update_data["result"] = sanitize_keys(job_result)
             if error is not None:
                 update_data["error"] = error
             db.collection("jobs").document(job_id).update(update_data)

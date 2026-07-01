@@ -131,7 +131,7 @@ def extract_table_block(
         for cell in row.cells:
             row_data.append(cell.text)
 
-        rows.append(row_data)
+        rows.append({"cells": row_data})
 
     return {
         "block_id": block_id,
