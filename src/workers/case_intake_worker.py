@@ -75,7 +75,13 @@ def run_intake_graph(payload: Dict[str, Any]):
             from src.agents.setup_agent.utils.template_storage import sanitize_keys
             sanitized_result = sanitize_keys(job_result)
             db.collection("jobs").document(job_id).update(
-                {"status": "completed", "result": sanitized_result}
+                {
+                    "status": "completed",
+                    "result": sanitized_result,
+                    "next_question": result.get("next_question"),
+                    "completion_percentage": result.get("completion_percentage", 0.0),
+                    "ready_to_generate": result.get("ready_to_generate", False),
+                }
             )
 
         return result

@@ -35,3 +35,15 @@ def save_intake_session(
         merge=True,
 
     )
+
+
+def get_intake_session(
+    session_id: str,
+) -> dict:
+    """
+    Synchronous Firestore read.
+    Runs inside a worker thread.
+    """
+    db = get_db()
+    doc = db.collection("intake_sessions").document(session_id).get()
+    return doc.to_dict() if doc.exists else {}

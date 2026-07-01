@@ -48,7 +48,7 @@ def calculate_completion(
 
         for field in fields:
 
-            field_name = field.get("name")
+            field_name = field.get("field") or field.get("name")
 
             value = case_data.get(
                 field_name
