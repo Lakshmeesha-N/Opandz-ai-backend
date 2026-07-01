@@ -1,26 +1,9 @@
 # src/utils/template_storage.py
 
 from typing import Any
-from concurrent.futures import ThreadPoolExecutor
 import logging
 
 from src.core.config import settings
-
-
-# Small thread pool for background uploads
-_EXECUTOR = ThreadPoolExecutor(max_workers=2)
-
-
-def _submit_background(fn, *args, **kwargs):
-    fut = _EXECUTOR.submit(fn, *args, **kwargs)
-
-    def _cb(f):
-        try:
-            _ = f.result()
-        except Exception as e:
-            logging.exception("Background firebase upload failed: %s", e)
-
-    fut.add_done_callback(_cb)
 
 
 def sanitize_keys(data: Any) -> Any:
@@ -52,11 +35,10 @@ def save_template(
     lawyer_id: str,
     blueprint: dict,
 ) -> None:
-    """Save a document blueprint template to Firestore (backgrounded).
+    """Save a document blueprint template to Firestore synchronously.
 
-    When `settings.LOCAL_TEST` is True we perform the write synchronously so
-    test / dev flows can observe files immediately; otherwise the write is
-    scheduled on a background thread and this function returns immediately.
+    We perform the write synchronously to ensure correct execution order and
+    avoid race conditions on background threads.
     """
     from src.core import firebase  # lazy import — avoids GCS connection at module load
 
@@ -71,57 +53,39 @@ def save_template(
         "blueprint": sanitized_blueprint,
     }
 
-    def _do_set():
-        db.collection("templates").document(template_id).set(document_data)
-
-    if settings.LOCAL_TEST:
-        _do_set()
-    else:
-        _submit_background(_do_set)
+    db.collection("templates").document(template_id).set(document_data)
 
 
 def save_document_config(
     template_id: str,
     document_config: Any,
 ) -> None:
-    """Save document config to template (backgrounded similarly to `save_template`)."""
+    """Save document config to template synchronously."""
     from src.core import firebase  # lazy import
 
     firebase.ensure_globals()
     db = firebase.db
 
-    def _do_update():
-        db.collection("templates").document(template_id).update(
-            {
-                "document_config": document_config,
-            }
-        )
-
-    if settings.LOCAL_TEST:
-        _do_update()
-    else:
-        _submit_background(_do_update)
+    db.collection("templates").document(template_id).update(
+        {
+            "document_config": document_config,
+        }
+    )
 
 
 def save_field_manifest(
     template_id: str,
     field_manifest: Any,
 ) -> None:
-    """Store generated field manifest inside an existing template document (backgrounded)."""
+    """Store generated field manifest inside an existing template document synchronously."""
     from src.core import firebase  # lazy import
 
     firebase.ensure_globals()
     db = firebase.db
 
-    def _do_update():
-        db.collection("templates").document(template_id).update(
-            {
-                "field_manifest": field_manifest,
-            }
-        )
-
-    if settings.LOCAL_TEST:
-        _do_update()
-    else:
-        _submit_background(_do_update)
+    db.collection("templates").document(template_id).update(
+        {
+            "field_manifest": field_manifest,
+        }
+    )
 

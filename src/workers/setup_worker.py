@@ -66,8 +66,10 @@ def run_graph(payload: Dict[str, Any]):
         result = setup_agent_graph.invoke(initial_state)
 
         if job_id and db:
+            from src.agents.setup_agent.utils.template_storage import sanitize_keys
+            sanitized_result = sanitize_keys(result)
             db.collection("jobs").document(job_id).update(
-                {"status": "completed", "result": result}
+                {"status": "completed", "result": sanitized_result}
             )
 
         return result

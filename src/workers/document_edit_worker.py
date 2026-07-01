@@ -47,7 +47,8 @@ def update_job_in_firestore(job_id: str, status: str, result: Any = None, error:
         try:
             update_data = {"status": status}
             if result is not None:
-                update_data["result"] = result
+                from src.agents.setup_agent.utils.template_storage import sanitize_keys
+                update_data["result"] = sanitize_keys(result)
             if error is not None:
                 update_data["error"] = error
             db.collection("jobs").document(job_id).update(update_data)
