@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     vision_llm_model: Optional[str] = Field(None, env="VISION_LLM_MODEL")
     docx_llm_model: Optional[str] = Field(None, env="DOCX_LLM_MODEL")
     max_doc_pages: int = Field(6, env="MAX_DOC_PAGES")
+    doc_gen_max_retries: int = Field(3, env="DOC_GEN_MAX_RETRIES")
+
 
     # Google / Firebase
     project_id: Optional[str] = Field(None, env="PROJECT_ID")

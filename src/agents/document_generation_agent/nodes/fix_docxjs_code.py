@@ -44,11 +44,14 @@ async def fix_docxjs_code(
         )
 
         logger.info("[fix_docxjs_code] SUCCESS: generated fixed code size: %d characters", len(fixed_code))
+        retries = state.get("validation_retries", 0) + 1
         return {
             **state,
             "generated_docxjs_code": fixed_code,
+            "validation_retries": retries,
             "error": None,
         }
+
 
     except Exception as e:
         logger.exception("[fix_docxjs_code] ERROR: %s", str(e))

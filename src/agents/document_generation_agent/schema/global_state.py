@@ -18,3 +18,4 @@ class AgentState(TypedDict):
     generated_docxjs_code: str
 
     error: Optional[str]
+    validation_retries: int

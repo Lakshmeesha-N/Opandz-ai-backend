@@ -32,5 +32,7 @@ def enqueue_intake_job(payload: Dict[str, Any]) -> Optional[str]:
     job = q.enqueue(
         "src.workers.case_intake_worker.run_intake_graph",
         payload,
+        job_timeout=300,
     )
     return job.id
+

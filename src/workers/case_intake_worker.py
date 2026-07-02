@@ -33,6 +33,7 @@ def run_intake_graph(payload: Dict[str, Any]):
     from src.orchestrators.document_orchestrator import document_orchestrator
     from src.utils.cleanup import cleanup_temp_file
 
+
     job = get_current_job()
     job_id = job.id if job else None
 
@@ -69,6 +70,7 @@ def run_intake_graph(payload: Dict[str, Any]):
 
         import asyncio
         result = asyncio.run(document_orchestrator.run(initial_state))
+
 
 
         if job_id and db:

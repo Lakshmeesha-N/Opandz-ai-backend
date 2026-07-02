@@ -33,13 +33,14 @@ from src.agents.document_generation_agent.nodes.store_generated_docxjs_code impo
 def route_after_validation(
     state: AgentState,
 ) -> str:
-
-    if state.get(
-        "error",
-    ):
+    from src.core.config import settings
+    if state.get("error"):
+        if state.get("validation_retries", 0) >= settings.doc_gen_max_retries:
+            return "store"
         return "fix"
 
     return "store"
+
 
 
 graph = StateGraph(

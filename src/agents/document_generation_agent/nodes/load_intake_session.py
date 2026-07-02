@@ -60,7 +60,9 @@ async def load_generation_context(
                 )
             ),
             "error": None,
+            "validation_retries": 0,
         }
+
 
     except Exception as e:
 
