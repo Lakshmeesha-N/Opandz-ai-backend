@@ -28,14 +28,38 @@ def update_generated_document(
 
     document = snapshot.to_dict()
 
-    document_ref.update(
-        {
-            "generated_docxjs_code": generated_docxjs_code,
-            "version": document.get(
-                "version",
-                1,
+    try:
+        gcs_uri = document.get("generated_docxjs_code_url")
+        if gcs_uri:
+            # Write directly to existing GCS path
+            from src.agents.document_generation_agent.helpers.storage_fallback import upload_code_to_storage
+            upload_code_to_storage(document.get("template_id", "fallback"), document_id, generated_docxjs_code)
+            document_ref.update(
+                {
+                    "generated_docxjs_code": "",
+                    "version": document.get("version", 1) + 1,
+                    "updated_at": datetime.utcnow(),
+                }
             )
-            + 1,
-            "updated_at": datetime.utcnow(),
-        },
-    )
+        else:
+            # Try writing to Firestore
+            document_ref.update(
+                {
+                    "generated_docxjs_code": generated_docxjs_code,
+                    "version": document.get("version", 1) + 1,
+                    "updated_at": datetime.utcnow(),
+                }
+            )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Firestore update failed. Falling back to GCS: %s", str(e))
+        from src.agents.document_generation_agent.helpers.storage_fallback import upload_code_to_storage
+        gcs_uri = upload_code_to_storage(document.get("template_id", "fallback"), document_id, generated_docxjs_code)
+        document_ref.update(
+            {
+                "generated_docxjs_code": "",
+                "generated_docxjs_code_url": gcs_uri,
+                "version": document.get("version", 1) + 1,
+                "updated_at": datetime.utcnow(),
+            }
+        )

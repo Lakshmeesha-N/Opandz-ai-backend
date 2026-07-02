@@ -25,7 +25,13 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     gcc \
     libffi-dev \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g @babel/parser
+
+
 
 # --------------------------------------------------
 # Install Python Dependencies

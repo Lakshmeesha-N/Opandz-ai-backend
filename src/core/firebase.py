@@ -66,8 +66,16 @@ class _MockDocument:
 
     def set(self, data: Any):
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        
+        def custom_serializer(obj):
+            from datetime import datetime
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            raise TypeError(f"Type {type(obj)} not serializable")
+            
         with open(self.path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+            json.dump(data, f, indent=2, ensure_ascii=False, default=custom_serializer)
+
 
     def update(self, data: dict):
         if self.path.exists():

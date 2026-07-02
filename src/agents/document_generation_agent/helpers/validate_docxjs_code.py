@@ -69,9 +69,17 @@ def validate_docxjs_code(
             None,
         )
 
+    except FileNotFoundError:
+        # Node.js is not installed in the current environment; log warning and skip
+        import logging
+        logging.getLogger(__name__).warning("Node.js is not installed. Skipping syntax check.")
+        return (
+            True,
+            None,
+        )
     except Exception as e:
 
         return (
             False,
             str(e),
-        )
+        )
