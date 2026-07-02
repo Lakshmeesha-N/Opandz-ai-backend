@@ -110,16 +110,26 @@ async def fetch_documents_by_lawyer(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     from src.core.firebase import get_db
-    from firebase_admin import firestore
+    import datetime
     try:
         db = get_db()
         docs = await asyncio.to_thread(
             lambda: list(db.collection("generated_documents")
             .where("lawyer_id", "==", lawyer_id)
-            .order_by("created_at", direction=firestore.Query.DESCENDING)
             .stream())
         )
-        document_ids = [doc.id for doc in docs]
+        
+        def get_created_at(doc):
+            val = doc.to_dict().get("created_at")
+            if isinstance(val, datetime.datetime):
+                if val.tzinfo is None:
+                    return val.replace(tzinfo=datetime.timezone.utc)
+                return val
+            return datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+
+        # Sort in-memory by created_at descending to avoid needing a Firestore composite index
+        sorted_docs = sorted(docs, key=get_created_at, reverse=True)
+        document_ids = [doc.id for doc in sorted_docs]
         return {
             "lawyer_id": lawyer_id,
             "document_ids": document_ids,
