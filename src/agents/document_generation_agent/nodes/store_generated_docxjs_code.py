@@ -25,7 +25,8 @@ async def store_generated_docxjs_code_node(
         )
         session_id = state.get("session_id")
         template_id = state.get("template_id")
-        logger.info("[store_generated_docxjs_code_node] START: storing docxjs code. Generated document_id=%s, session_id=%s, template_id=%s", document_id, session_id, template_id)
+        lawyer_id = state.get("lawyer_id", "")
+        logger.info("[store_generated_docxjs_code_node] START: storing docxjs code. Generated document_id=%s, session_id=%s, template_id=%s, lawyer_id=%s", document_id, session_id, template_id, lawyer_id)
 
         await asyncio.to_thread(
             store_generated_docxjs_code,
@@ -33,6 +34,7 @@ async def store_generated_docxjs_code_node(
             session_id,
             template_id,
             state["generated_docxjs_code"],
+            lawyer_id,
         )
 
         logger.info("[store_generated_docxjs_code_node] SUCCESS: docxjs code stored successfully for document_id=%s", document_id)

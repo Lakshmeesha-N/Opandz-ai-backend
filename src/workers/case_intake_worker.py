@@ -55,6 +55,7 @@ def run_intake_graph(payload: Dict[str, Any]):
         initial_state = {
             "session_id": payload.get("session_id", ""),
             "template_id": payload.get("template_id", ""),
+            "lawyer_id": payload.get("uid", ""),
             "field_manifest": {},
             "missing_fields": [],
             "case_data": {},
@@ -76,7 +77,7 @@ def run_intake_graph(payload: Dict[str, Any]):
         if job_id and db:
             error_val = result.get("error")
             status = "failed" if error_val else "completed"
-            job_result = {k: v for k, v in result.items() if k not in ("blueprint", "docx_blueprint")}
+            job_result = {k: v for k, v in result.items() if k not in ("blueprint", "docx_blueprint", "generated_docxjs_code", "generated_docxjs_code_url")}
             from src.agents.setup_agent.utils.template_storage import sanitize_keys
             sanitized_result = sanitize_keys(job_result)
             

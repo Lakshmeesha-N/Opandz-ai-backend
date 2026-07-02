@@ -5,6 +5,7 @@ class AgentState(TypedDict):
 
     session_id: str
     template_id: str
+    lawyer_id: Optional[str]
 
     document_blueprint_source: str
 

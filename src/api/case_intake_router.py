@@ -140,6 +140,7 @@ def _run_intake_inproc(job_id: str, payload: Dict[str, Any]):
         initial_state: AgentState = {
             "session_id": payload.get("session_id", ""),
             "template_id": payload.get("template_id", ""),
+            "lawyer_id": payload.get("uid", ""),
             "field_manifest": {},
             "missing_fields": [],
             "case_data": {},
@@ -159,7 +160,8 @@ def _run_intake_inproc(job_id: str, payload: Dict[str, Any]):
             )
         )
         JOBS[job_id]["status"] = "completed"
-        JOBS[job_id]["result"] = result
+        job_result = {k: v for k, v in result.items() if k not in ("blueprint", "docx_blueprint", "generated_docxjs_code", "generated_docxjs_code_url")}
+        JOBS[job_id]["result"] = job_result
     except Exception as e:
         logging.exception("Intake inproc job failed %s", job_id)
         JOBS[job_id]["status"] = "failed"

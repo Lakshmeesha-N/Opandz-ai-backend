@@ -47,6 +47,7 @@ class DocumentOrchestrator:
                 )
             )
 
+            generation_result["ready_to_generate"] = True
             return generation_result
 
         except Exception as e:
@@ -71,6 +72,9 @@ class DocumentOrchestrator:
             "template_id": intake_result[
                 "template_id"
             ],
+            "lawyer_id": intake_result.get(
+                "lawyer_id", ""
+            ),
             "document_blueprint_source": "",
             "case_data": intake_result[
                 "case_data"

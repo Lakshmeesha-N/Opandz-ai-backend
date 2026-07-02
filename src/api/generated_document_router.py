@@ -100,3 +100,32 @@ async def remove_generated_document(
     return {
         "success": True,
     }
+
+
+@router.get(
+    "/lawyer/{lawyer_id}",
+)
+async def fetch_documents_by_lawyer(
+    lawyer_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    from src.core.firebase import get_db
+    from firebase_admin import firestore
+    try:
+        db = get_db()
+        docs = await asyncio.to_thread(
+            lambda: list(db.collection("generated_documents")
+            .where("lawyer_id", "==", lawyer_id)
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .stream())
+        )
+        document_ids = [doc.id for doc in docs]
+        return {
+            "lawyer_id": lawyer_id,
+            "document_ids": document_ids,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch documents for lawyer: {e}",
+        )
