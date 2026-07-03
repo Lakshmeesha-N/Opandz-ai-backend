@@ -105,13 +105,71 @@ BLUEPRINT RULES
 18. Preserve ordering.
 
 ==================================================================
-CASE DATA RULES
+DOCUMENT TYPE CLASSIFICATION (DO THIS FIRST)
 ==================================================================
 
-1. Use case_data whenever dynamic values exist.
-2. Replace placeholders with case_data values.
-3. Do not hardcode dynamic values.
-4. Safely handle missing values.
+Before writing any function, classify the document using case_data
+and document_config:
+
+TYPE A — DATA-DRIVEN DOCUMENT
+  case_data contains real per-case fields that the document text
+  depends on (names, dates, amounts, titles, IDs, etc.), e.g.
+  letters, notices, contracts, invoices, forms.
+
+TYPE B — NARRATIVE / STATIC DOCUMENT
+  case_data is empty, absent, or not actually referenced by the
+  document's content — e.g. stories, essays, articles, fixed
+  reports, or any content that is the same regardless of case_data.
+
+Apply ONLY the rule set below that matches the classification. Do
+not mix them within the same document.
+
+==================================================================
+CASE DATA RULES — TYPE A (DATA-DRIVEN DOCUMENTS)
+==================================================================
+
+1. Every generated function that needs dynamic content MUST accept a
+   caseData argument (e.g. build_03_suspension_details(caseData)).
+2. Inside each function, insert the REAL values from the provided
+   case_data object directly via caseData.<field_name> references
+   (e.g. caseData.employee_name, caseData.suspension_start_date).
+3. Do NOT invent, rename, or guess field names. Use the exact keys
+   present in case_data.
+4. Do NOT emit generic placeholder text such as "[Employee Name]",
+   "{{start_date}}", "TBD", "Insert value here", or similar. Every
+   sentence must read as a finished, real document that already
+   contains the caller's data once buildDocument(caseData) is
+   invoked with the actual case_data object.
+5. Static/non-dynamic text (headings, boilerplate legal language,
+   labels) may remain as literal strings — only values that vary
+   per case must come from caseData.
+6. Safely handle missing values (e.g. caseData.field ?? "") but this
+   must never be used as an excuse to fall back to placeholder
+   wording.
+7. buildDocument(caseData) must call every function with caseData so
+   the real values flow through end-to-end — no function should
+   silently drop the argument or hardcode a stand-in value instead.
+8. Do not hardcode dynamic values as fixed literals outside of
+   caseData references — dynamic fields must always be sourced live
+   from caseData, not baked in as fixed text.
+
+==================================================================
+CASE DATA RULES — TYPE B (NARRATIVE / STATIC DOCUMENTS)
+==================================================================
+
+1. Functions MUST NOT take a caseData argument (or any argument) —
+   define each as a plain no-arg function, e.g.
+   build_02_chapter_two().
+2. Do not reference caseData, undefined variables, or placeholders
+   anywhere in these functions.
+3. Write the actual finished content (the real narrative, story,
+   article, or report text) directly as literal strings inside the
+   function — content is fixed, not templated.
+4. buildDocument() also takes no caseData argument in this case and
+   simply calls each no-arg function in order.
+5. Never fabricate case-like fields (names, dates, IDs) that do not
+   belong in a static/narrative document just to justify a function
+   argument.
 
 ==================================================================
 DOCX.JS RULES
@@ -134,8 +192,10 @@ ASSEMBLY RULES
 
 Generate:
 
-export function buildDocument(caseData)
+export function buildDocument(caseData)   // TYPE A documents
+export function buildDocument()           // TYPE B documents
 
+Use the signature that matches the document classification above.
 This function must:
 
 1. Create document sections.
@@ -146,7 +206,7 @@ This function must:
 6. Return a complete DOCX.js document.
 7. Return:
 
-   new Document({...})
+   new Document({{...}})
 
 8. The returned Document must be directly executable without modification.
 9. The returned Document must support DOCX export.
