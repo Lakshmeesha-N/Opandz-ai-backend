@@ -31,6 +31,14 @@ builder = StateGraph(
     AgentState,
 )
 
+def route_after_load(
+    state: AgentState,
+) -> str:
+    if state.get("error"):
+        return END
+    return "document_edit_agent"
+
+
 builder.add_node(
     "load_document",
     load_document_node,
@@ -51,9 +59,13 @@ builder.add_edge(
     "load_document",
 )
 
-builder.add_edge(
+builder.add_conditional_edges(
     "load_document",
-    "document_edit_agent",
+    route_after_load,
+    {
+        "document_edit_agent": "document_edit_agent",
+        END: END,
+    },
 )
 
 builder.add_conditional_edges(

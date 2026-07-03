@@ -63,7 +63,31 @@ async def document_edit_agent_node(
             if messages and hasattr(messages[-1], "content") and messages[-1].type == "human":
                 messages[-1].content = str(messages[-1].content) + extracted_content_str
 
-        logger.info("[document_edit_agent_node] Invoking document edit LLM with %d messages", len(messages))
+        # Enforce validation attempt limits from config
+        from src.core.config import settings
+        validation_calls = 0
+        last_validation_failed = False
+        last_validation_error = None
+        for m in messages:
+            if hasattr(m, "tool_calls") and m.tool_calls:
+                for tc in m.tool_calls:
+                    if tc.get("name") == "validate_docxjs":
+                        validation_calls += 1
+            # Check if this is the ToolMessage response for validate_docxjs
+            if getattr(m, "name", None) == "validate_docxjs":
+                content_str = str(getattr(m, "content", ""))
+                # If there's an error in validation, mark it as failed
+                if "error" in content_str.lower() or "exception" in content_str.lower() or "syntaxerror" in content_str.lower() or "fail" in content_str.lower():
+                    last_validation_failed = True
+                    last_validation_error = content_str
+                else:
+                    last_validation_failed = False
+
+        if validation_calls >= settings.doc_edit_max_retries and last_validation_failed:
+            logger.error("[document_edit_agent_node] Max validation attempts reached. Error: %s", last_validation_error)
+            raise ValueError(f"Max validation attempts ({settings.doc_edit_max_retries}) reached. Final error: {last_validation_error}")
+
+        logger.info("[document_edit_agent_node] Invoking document edit LLM with %d messages (validation_attempts=%d/%d)", len(messages), validation_calls, settings.doc_edit_max_retries)
         response = await document_edit_llm.ainvoke(
             messages,
         )

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     docx_llm_model: Optional[str] = Field(None, env="DOCX_LLM_MODEL")
     max_doc_pages: int = Field(6, env="MAX_DOC_PAGES")
     doc_gen_max_retries: int = Field(3, env="DOC_GEN_MAX_RETRIES")
+    doc_edit_max_retries: int = Field(2, env="DOC_EDIT_MAX_RETRIES")
 
 
     # Google / Firebase

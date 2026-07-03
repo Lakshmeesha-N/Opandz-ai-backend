@@ -43,3 +43,4 @@ test/
 Thumbs.db
 
 *.pdf
+cloudbuild_copy.yaml

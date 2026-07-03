@@ -33,16 +33,18 @@ JOBS: Dict[str, Dict[str, Any]] = {}
 
 
 class DocumentEditRequest(BaseModel):
-    template_id: str
+    document_id: str
     user_message: str
+    template_id: Optional[str] = None
     messages: Optional[List[Dict[str, Any]]] = []
 
 
 @router.post("/", status_code=202)
 async def start_document_edit(
     background_tasks: BackgroundTasks,
-    template_id: str = Form(...),
+    document_id: str = Form(...),
     user_message: str = Form(...),
+    template_id: Optional[str] = Form(None),
     messages: Optional[str] = Form("[]"),
     files: Optional[List[UploadFile]] = File(None),
     current_user: CurrentUser = Depends(get_current_user),
@@ -92,7 +94,7 @@ async def start_document_edit(
                 )
 
             file_bytes = await file.read()
-            gcs_path = f"uploads/document_edit/{current_user.uid}/{template_id}/{filename}"
+            gcs_path = f"uploads/document_edit/{current_user.uid}/{document_id}/{filename}"
             try:
                 from src.core import firebase
                 firebase.ensure_globals()
@@ -112,7 +114,8 @@ async def start_document_edit(
                 raise HTTPException(status_code=500, detail=f"Failed to upload file to storage: {e}")
 
     payload = {
-        "template_id": template_id,
+        "template_id": template_id or "",
+        "document_id": document_id,
         "user_message": user_message,
         "messages": messages_parsed,
         "uploaded_files": uploaded_files,
@@ -191,6 +194,7 @@ async def _run_graph_async_inproc(payload: Dict[str, Any]) -> Dict[str, Any]:
     initial_state = {
         "lawyer_id": payload.get("lawyer_id", ""),
         "template_id": payload.get("template_id", ""),
+        "document_id": payload.get("document_id", ""),
         "user_message": payload.get("user_message", ""),
         "temp_file_path": "",
         "document_config": {},

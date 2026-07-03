@@ -19,11 +19,11 @@ async def load_document_node(
 ) -> AgentState:
 
     try:
-        template_id = state.get("template_id")
-        logger.info("[load_document_node] START: loading template_id=%s", template_id)
+        document_id = state.get("document_id")
+        logger.info("[load_document_node] START: loading document_id=%s", document_id)
 
         document = await load_document(
-            template_id=template_id,
+            document_id=document_id,
         )
 
         temp_file = tempfile.NamedTemporaryFile(
@@ -51,6 +51,7 @@ async def load_document_node(
             "blueprint": document[
                 "blueprint"
             ],
+            "template_id": document.get("template_id", state.get("template_id")),
             "error": None,
         }
 

@@ -10,22 +10,21 @@ from src.agents.document_edit_agent.helpers.docs_config_cleaner import (
 
 
 async def load_document(
-    template_id: str,
+    document_id: str,
 ) -> dict:
 
-    document_task = asyncio.to_thread(
+    document_data = await asyncio.to_thread(
         _load_generated_document,
-        template_id,
+        document_id,
     )
 
-    template_task = asyncio.to_thread(
+    template_id = document_data.get("template_id")
+    if not template_id:
+        raise ValueError("template_id not found in generated document")
+
+    template_data = await asyncio.to_thread(
         _load_template,
         template_id,
-    )
-
-    document_data, template_data = await asyncio.gather(
-        document_task,
-        template_task,
     )
 
     document_config = build_llm_document_context(
@@ -45,11 +44,12 @@ async def load_document(
             "blueprint",
             {},
         ),
+        "template_id": template_id,
     }
 
 
 def _load_generated_document(
-    template_id: str,
+    document_id: str,
 ) -> dict:
 
     db = get_db()
@@ -57,27 +57,29 @@ def _load_generated_document(
         db.collection(
             "generated_documents",
         )
-        .where(
-            "template_id",
-            "==",
-            template_id,
+        .document(
+            document_id,
         )
-        .limit(1)
-        .stream()
+        .get()
     )
 
-    document = next(
-        document_ref,
-        None,
-    )
-
-    if not document:
+    if not document_ref.exists:
 
         raise ValueError(
             "Generated document not found",
         )
 
-    return document.to_dict()
+    data = document_ref.to_dict()
+    if data and data.get("generated_docxjs_code_url"):
+        from src.agents.document_generation_agent.helpers.storage_fallback import read_code_from_storage
+        try:
+            code = read_code_from_storage(data["generated_docxjs_code_url"])
+            data["generated_docxjs_code"] = code
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Failed to load fallback code from GCS: %s", str(e))
+
+    return data
 
 
 def _load_template(

@@ -96,6 +96,7 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
         initial_state = {
             "lawyer_id": payload.get("lawyer_id", ""),
             "template_id": payload.get("template_id", ""),
+            "document_id": payload.get("document_id", ""),
             "user_message": payload.get("user_message", ""),
             "temp_file_path": "",
             "document_config": {},

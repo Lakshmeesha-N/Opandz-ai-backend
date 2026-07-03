@@ -5,7 +5,8 @@ from typing import TypedDict, Optional, Any
 class AgentState(TypedDict):
 
     lawyer_id: str
-    template_id: str
+    template_id: Optional[str]
+    document_id: str
 
     user_message: str
 
