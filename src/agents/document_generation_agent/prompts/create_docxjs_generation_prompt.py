@@ -35,6 +35,9 @@ The generated code must contain:
 3. One function for every footer_group.
 4. One final buildDocument() function that assembles the document.
 
+Every one of these functions is fully self-contained and takes zero
+parameters. See FUNCTION SIGNATURE RULES below.
+
 ==================================================================
 FUNCTION NAMING RULES
 ==================================================================
@@ -66,6 +69,26 @@ section_footer
 build_section_footer()
 
 Use the exact semantic group names when creating function names.
+
+==================================================================
+FUNCTION SIGNATURE RULES
+==================================================================
+
+1. Every function — every header function, every footer function,
+   every semantic_group function, and buildDocument — is defined
+   with ZERO parameters. No exceptions.
+2. No function signature may include caseData, data, params, or any
+   other parameter name, under any circumstance.
+3. All content a function needs is written directly inside that
+   function as fully resolved literal text. Nothing is passed in
+   from outside and nothing is read from an external variable.
+4. buildDocument() itself takes no parameters and calls every other
+   function with no arguments (e.g. build_03_suspension_details(),
+   not build_03_suspension_details(caseData)).
+5. If a function currently under construction would only make sense
+   with a parameter, that is a signal the value it needs must
+   instead be resolved now and hardcoded directly into that
+   function's literal text — not solved by adding a parameter.
 
 ==================================================================
 SECTION HANDLING RULES
@@ -105,71 +128,43 @@ BLUEPRINT RULES
 18. Preserve ordering.
 
 ==================================================================
-DOCUMENT TYPE CLASSIFICATION (DO THIS FIRST)
+CONTENT & VALUE RULES
 ==================================================================
 
-Before writing any function, classify the document using case_data
-and document_config:
-
-TYPE A — DATA-DRIVEN DOCUMENT
-  case_data contains real per-case fields that the document text
-  depends on (names, dates, amounts, titles, IDs, etc.), e.g.
-  letters, notices, contracts, invoices, forms.
-
-TYPE B — NARRATIVE / STATIC DOCUMENT
-  case_data is empty, absent, or not actually referenced by the
-  document's content — e.g. stories, essays, articles, fixed
-  reports, or any content that is the same regardless of case_data.
-
-Apply ONLY the rule set below that matches the classification. Do
-not mix them within the same document.
-
-==================================================================
-CASE DATA RULES — TYPE A (DATA-DRIVEN DOCUMENTS)
-==================================================================
-
-1. Every generated function that needs dynamic content MUST accept a
-   caseData argument (e.g. build_03_suspension_details(caseData)).
-2. Inside each function, insert the REAL values from the provided
-   case_data object directly via caseData.<field_name> references
-   (e.g. caseData.employee_name, caseData.suspension_start_date).
-3. Do NOT invent, rename, or guess field names. Use the exact keys
-   present in case_data.
+1. case_data, document_config, and blueprint are provided to you
+   below as the fully resolved source of truth for THIS one
+   document. You are not writing a reusable template — you are
+   generating the final, finished code for this specific document
+   instance.
+2. Wherever the document's content depends on a value from
+   case_data (a name, date, title, amount, ID, reason, etc.), write
+   that ACTUAL value directly into the JS as literal text at
+   generation time. Do not write caseData.<field>, do not use a
+   template-literal variable, do not read the value from any
+   argument — type the real resolved value straight into the string.
+3. Do NOT invent, guess, or fabricate any value that is not present
+   in case_data.
 4. Do NOT emit generic placeholder text such as "[Employee Name]",
-   "{{start_date}}", "TBD", "Insert value here", or similar. Every
-   sentence must read as a finished, real document that already
-   contains the caller's data once buildDocument(caseData) is
-   invoked with the actual case_data object.
-5. Static/non-dynamic text (headings, boilerplate legal language,
-   labels) may remain as literal strings — only values that vary
-   per case must come from caseData.
-6. Safely handle missing values (e.g. caseData.field ?? "") but this
-   must never be used as an excuse to fall back to placeholder
-   wording.
-7. buildDocument(caseData) must call every function with caseData so
-   the real values flow through end-to-end — no function should
-   silently drop the argument or hardcode a stand-in value instead.
-8. Do not hardcode dynamic values as fixed literals outside of
-   caseData references — dynamic fields must always be sourced live
-   from caseData, not baked in as fixed text.
-
-==================================================================
-CASE DATA RULES — TYPE B (NARRATIVE / STATIC DOCUMENTS)
-==================================================================
-
-1. Functions MUST NOT take a caseData argument (or any argument) —
-   define each as a plain no-arg function, e.g.
-   build_02_chapter_two().
-2. Do not reference caseData, undefined variables, or placeholders
-   anywhere in these functions.
-3. Write the actual finished content (the real narrative, story,
-   article, or report text) directly as literal strings inside the
-   function — content is fixed, not templated.
-4. buildDocument() also takes no caseData argument in this case and
-   simply calls each no-arg function in order.
-5. Never fabricate case-like fields (names, dates, IDs) that do not
-   belong in a static/narrative document just to justify a function
-   argument.
+   "{{start_date}}", "TBD", "Insert value here", "N/A — pending", or
+   similar. Every sentence must read as a finished, real document
+   with real resolved content — never a template.
+5. If the document is narrative or static in nature (a story, essay,
+   article, or fixed report where case_data does not apply), write
+   the real, finished content directly as literal text. The same
+   zero-parameter rule applies — this is not an exception to it.
+6. Static/boilerplate text (headings, standard legal or formal
+   language, labels) is written as literal strings exactly as
+   always.
+7. If a value the document needs is genuinely absent from case_data,
+   do not fabricate it and do not insert a bracket placeholder —
+   omit that specific detail as gracefully as the surrounding
+   sentence allows rather than inventing or templating it.
+8. Because every value is fully resolved and hardcoded, there are no
+   defaults, no fallbacks, and no runtime inputs to manage anywhere
+   in the generated code.
+9. Future edits to any value happen by directly editing the literal
+   text inside the specific function that contains it — never by
+   reintroducing a parameter to that function.
 
 ==================================================================
 DOCX.JS RULES
@@ -183,7 +178,7 @@ DOCX.JS RULES
 6. Every function must return valid DOCX.js elements.
 7. Avoid duplicate code whenever possible.
 8. Avoid circular dependencies.
-9. Ensure functions can be reused independently.
+9. Ensure functions are self-contained and independently callable.
 10. Ensure generated code can be assembled later.
 
 ==================================================================
@@ -192,14 +187,12 @@ ASSEMBLY RULES
 
 Generate:
 
-export function buildDocument(caseData)   // TYPE A documents
-export function buildDocument()           // TYPE B documents
+export function buildDocument()
 
-Use the signature that matches the document classification above.
 This function must:
 
 1. Create document sections.
-2. Call all generated functions.
+2. Call all generated functions, each with no arguments.
 3. Preserve execution order.
 4. Preserve section ordering.
 5. Preserve header/footer ordering.
@@ -211,6 +204,8 @@ This function must:
 8. The returned Document must be directly executable without modification.
 9. The returned Document must support DOCX export.
 10. The returned Document must support real-time preview rendering.
+11. buildDocument itself takes no parameters — every value it needs
+    is already fully resolved inside the functions it calls.
 ==================================================================
 VALIDATION RULES
 ==================================================================
@@ -225,6 +220,10 @@ The generated code MUST:
 6. Be production ready.
 7. Support future insertion of additional semantic groups.
 8. Support future insertion of additional sections.
+9. Contain zero functions (including buildDocument) that declare or
+   accept any parameters.
+10. Contain zero references to caseData or any other external/data
+    variable — every value must already be a resolved literal.
 
 ==================================================================
 OUTPUT RULES
