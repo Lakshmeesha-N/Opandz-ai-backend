@@ -50,6 +50,19 @@ def update_job_in_firestore(job_id: str, status: str, result: Any = None, error:
                 # Strip heavy blueprint fields to prevent redundancy in jobs collection
                 if isinstance(result, dict):
                     job_result = {k: v for k, v in result.items() if k not in ("blueprint", "docx_blueprint")}
+                    # Convert any LangChain messages to dict to avoid Firestore serialization errors
+                    if "messages" in job_result and isinstance(job_result["messages"], list):
+                        safe_messages = []
+                        for msg in job_result["messages"]:
+                            if hasattr(msg, "model_dump"):
+                                safe_messages.append(msg.model_dump())
+                            elif hasattr(msg, "dict"):
+                                safe_messages.append(msg.dict())
+                            elif isinstance(msg, dict):
+                                safe_messages.append(msg)
+                            else:
+                                safe_messages.append({"content": str(msg)})
+                        job_result["messages"] = safe_messages
                 else:
                     job_result = result
                 from src.agents.setup_agent.utils.template_storage import sanitize_keys
