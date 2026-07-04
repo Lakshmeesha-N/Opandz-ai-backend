@@ -1,10 +1,11 @@
-// src/agents/document_edit_agent/scripts/parse_ast.js
-
+const fs = require("fs");
 const parser = require("@babel/parser");
 
-const code = process.argv[2];
+const filePath = process.argv[2];
 
 try {
+
+    const code = fs.readFileSync(filePath, "utf8");
 
     const ast = parser.parse(
         code,
