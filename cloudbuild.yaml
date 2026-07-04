@@ -47,6 +47,12 @@ substitutions:
 
   # Cloud Run Service Names
   _SERVICE_API:           "backend-api"
+  _SERVICE_DOC_EDIT:      "document-edit-worker"
+
+  # Scaling — Workers (single-threaded RQ workers)
+  _WORKER_MAX_INSTANCES: "2"
+  _WORKER_CPU:           "0.5"
+  _WORKER_MEMORY:        "1Gi"
 
   # Cloud Run Runtime Config
   _SERVICE_ACCOUNT: "opandz-cloudrun-sa@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -158,9 +164,41 @@ steps:
           --memory="${_API_MEMORY}" \
           --concurrency="${_API_CONCURRENCY}" \
           --max-instances="${_API_MAX_INSTANCES}" \
+          --vpc-connector="${_VPC_CONNECTOR}" \
+          --vpc-egress="private-ranges-only" \
           --set-env-vars="LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}" \
-          --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,FIREBASE_STORAGE_BUCKET=FIREBASE_STORAGE_BUCKET:latest" \
+          --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest,FIREBASE_STORAGE_BUCKET=FIREBASE_STORAGE_BUCKET:latest" \
           $$NO_TRAFFIC_FLAG
+    waitFor: ["push-image"]
+
+  # ---------------------------------------------------------------------------
+  # Step 3b — DEPLOY: document-edit-worker
+  # ---------------------------------------------------------------------------
+  - id: "deploy-document-edit-worker"
+    name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "${_SERVICE_DOC_EDIT}"
+      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--service-account=${_SERVICE_ACCOUNT}"
+      - "--command=python"
+      - "--args=-m,src.workers.document_edit_worker"
+      - "--port=8080"
+      - "--no-allow-unauthenticated"
+      - "--cpu=${_WORKER_CPU}"
+      - "--memory=${_WORKER_MEMORY}"
+      - "--concurrency=1"
+      - "--min-instances=0"
+      - "--max-instances=${_WORKER_MAX_INSTANCES}"
+      - "--no-cpu-throttling"
+      - "--vpc-connector=${_VPC_CONNECTOR}"
+      - "--vpc-egress=private-ranges-only"
+      - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
+      - "--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest,FIREBASE_STORAGE_BUCKET=FIREBASE_STORAGE_BUCKET:latest"
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
@@ -178,6 +216,7 @@ steps:
       - "--to-latest"
     waitFor:
       - "deploy-backend-api"
+      - "deploy-document-edit-worker"
 
 # =============================================================================
 # ARTIFACT REGISTRY — final image references recorded in Cloud Build history
