@@ -32,43 +32,6 @@ async def document_edit_agent_node(
             [],
         )
 
-        uploaded_files = state.get("uploaded_files", [])
-        extracted_content_str = ""
-        if uploaded_files:
-            logger.info("[document_edit_agent_node] Extracting content from %d uploaded files", len(uploaded_files))
-            from src.agents.case_intake_agent.helpers.extract_all_evidence import extract_all_evidence
-            evidences = await extract_all_evidence(uploaded_files)
-            for ev in evidences:
-                extracted_content_str += f"\n\n--- Attached File: {ev['file_name']} ---\nContent:\n{ev['content']}"
-
-        from langchain_core.messages import convert_to_messages, HumanMessage
-        if messages:
-            messages = list(convert_to_messages(messages))
-            # Filter out empty messages to prevent Gemini API 'contents are required' error
-            messages = [m for m in messages if str(m.content).strip() or (hasattr(m, "tool_calls") and m.tool_calls)]
-
-        if not messages:
-            user_content = state.get("user_message", "")
-            if extracted_content_str:
-                user_content += extracted_content_str
-            logger.info("[document_edit_agent_node] Initializing conversation with user content size: %d", len(user_content))
-            messages = [
-                HumanMessage(
-                    content=user_content,
-                ),
-            ]
-        else:
-            user_content = state.get("user_message", "")
-            if extracted_content_str:
-                user_content += extracted_content_str
-            if user_content.strip():
-                logger.info("[document_edit_agent_node] Appending current user message to history")
-                messages.append(HumanMessage(content=user_content))
-
-        # ALWAYS ensure the system prompt is at the beginning
-        if not messages or getattr(messages[0], "type", "") != "system":
-            messages.insert(0, get_system_prompt(state.get("document_config", {})))
-
         # Enforce validation attempt limits from config
         from src.core.config import settings
         validation_calls = 0
@@ -100,11 +63,7 @@ async def document_edit_agent_node(
         logger.info("[document_edit_agent_node] LLM call complete")
 
         return {
-            **state,
-            "messages": [
-                *messages,
-                response,
-            ],
+            "messages": [response],
             "error": None,
         }
 

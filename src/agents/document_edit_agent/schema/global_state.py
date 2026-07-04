@@ -1,6 +1,6 @@
 # src/agents/document_edit_agent/schema/global_state.py
-from typing import TypedDict, Optional, Any
-
+from typing import TypedDict, Optional, Any, Annotated
+from langgraph.graph.message import add_messages
 
 class AgentState(TypedDict):
 
@@ -14,6 +14,6 @@ class AgentState(TypedDict):
 
     document_config: dict[str, Any]
     blueprint: dict[str, Any]
-    messages: list[Any]
+    messages: Annotated[list[Any], add_messages]
     uploaded_files: Optional[list[str]]
     error: Optional[str]
