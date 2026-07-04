@@ -51,7 +51,7 @@ substitutions:
 
   # Scaling — Workers (single-threaded RQ workers)
   _WORKER_MAX_INSTANCES: "2"
-  _WORKER_CPU:           "0.5"
+  _WORKER_CPU:           "1"
   _WORKER_MEMORY:        "1Gi"
 
   # Cloud Run Runtime Config
