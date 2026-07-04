@@ -42,15 +42,23 @@ async def document_edit_agent_node(
                 for tc in m.tool_calls:
                     if tc.get("name") == "validate_docxjs":
                         validation_calls += 1
-            # Check if this is the ToolMessage response for validate_docxjs
             if getattr(m, "name", None) == "validate_docxjs":
                 content_str = str(getattr(m, "content", ""))
-                # If there's an error in validation, mark it as failed
-                if "error" in content_str.lower() or "exception" in content_str.lower() or "syntaxerror" in content_str.lower() or "fail" in content_str.lower():
-                    last_validation_failed = True
-                    last_validation_error = content_str
-                else:
-                    last_validation_failed = False
+                import json
+                try:
+                    res = json.loads(content_str)
+                    if isinstance(res, dict) and res.get("valid") is True:
+                        last_validation_failed = False
+                    else:
+                        last_validation_failed = True
+                        last_validation_error = content_str
+                except Exception:
+                    # Fallback if not valid JSON
+                    if "error" in content_str.lower() and "error\": null" not in content_str.lower():
+                        last_validation_failed = True
+                        last_validation_error = content_str
+                    else:
+                        last_validation_failed = False
 
         if validation_calls >= settings.doc_edit_max_retries and last_validation_failed:
             logger.error("[document_edit_agent_node] Max validation attempts reached. Error: %s", last_validation_error)

@@ -21,6 +21,10 @@ def sanitize_keys(data: Any) -> Any:
                 .replace("]", "_")
                 .replace("*", "_")
             )
+            # Firestore strictly prohibits keys that start and end with '__' (reserved)
+            if new_key.startswith("__") and new_key.endswith("__") and len(new_key) >= 4:
+                new_key = "sanitized_" + new_key[2:-2]
+                
             if not new_key:
                 new_key = "empty_key"
             new_dict[new_key] = sanitize_keys(v)
