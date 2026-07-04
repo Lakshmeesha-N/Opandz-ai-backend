@@ -46,7 +46,7 @@ async def start_document_edit(
     user_message: str = Form(...),
     template_id: Optional[str] = Form(None),
     messages: Optional[str] = Form("[]"),
-    files: Optional[List[UploadFile]] = File(None),
+    files: List[UploadFile] = File(default=[]),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """

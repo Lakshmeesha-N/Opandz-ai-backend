@@ -44,7 +44,7 @@ async def start_intake(
     template_id: str = Form(...),
     user_message: Optional[str] = Form(""),
     chat_history: Optional[str] = Form("[]"),
-    files: Optional[List[UploadFile]] = File(None),
+    files: List[UploadFile] = File(default=[]),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """
