@@ -57,10 +57,13 @@ async def document_edit_agent_node(
                     content=user_content,
                 ),
             ]
-        elif extracted_content_str:
-            logger.info("[document_edit_agent_node] Appending attached files content to the last user message")
-            if messages and hasattr(messages[-1], "content") and messages[-1].type == "human":
-                messages[-1].content = str(messages[-1].content) + extracted_content_str
+        else:
+            user_content = state.get("user_message", "")
+            if extracted_content_str:
+                user_content += extracted_content_str
+            if user_content.strip():
+                logger.info("[document_edit_agent_node] Appending current user message to history")
+                messages.append(HumanMessage(content=user_content))
 
         # ALWAYS ensure the system prompt is at the beginning
         if not messages or getattr(messages[0], "type", "") != "system":
