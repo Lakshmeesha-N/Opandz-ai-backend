@@ -7,16 +7,18 @@ import asyncio
 from typing import Any, Optional
 
 
-def _create_underlying_client():
+def _create_underlying_client(model_name: Optional[str] = None):
     """Create the provider-specific LLM client (langchain wrappers).
     This mirrors the previous `get_llm` behavior but is used internally
     to back the shared client wrapper.
     """
+    target_model = model_name or settings.llm_model
+
     # --- OpenAI Branch ---
     if settings.llm_provider == "openai":
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
-            model=settings.llm_model,
+            model=target_model,
             api_key=settings.openai_api_key,
             temperature=0,
         )
@@ -26,7 +28,7 @@ def _create_underlying_client():
         if settings.gemini_api_key:
             from langchain_google_genai import ChatGoogleGenerativeAI
             return ChatGoogleGenerativeAI(
-                model=settings.llm_model,
+                model=target_model,
                 google_api_key=settings.gemini_api_key,
                 temperature=0,
             )
@@ -35,7 +37,7 @@ def _create_underlying_client():
                 raise ValueError("project_id must be set in environment or GEMINI_API_KEY must be provided")
             from langchain_google_vertexai import ChatVertexAI
             return ChatVertexAI(
-                model_name=settings.llm_model,
+                model_name=target_model,
                 project=settings.project_id,
                 location=settings.gcp_location or "us-central1",
                 temperature=0,
@@ -45,7 +47,7 @@ def _create_underlying_client():
     else:
         from langchain_ollama import ChatOllama
         return ChatOllama(
-            model=settings.llm_model,
+            model=target_model,
             temperature=0.3,
         )
 
@@ -58,8 +60,8 @@ class SharedLLM:
     - `ainvoke(prompt)` async API for non-blocking calls
     """
 
-    def __init__(self, batch_interval: float = 0.05, batch_size: int = 8, client: Any = None):
-        self._client = client or _create_underlying_client()
+    def __init__(self, batch_interval: float = 0.05, batch_size: int = 8, client: Any = None, model_name: Optional[str] = None):
+        self._client = client or _create_underlying_client(model_name=model_name)
         self._queue: "queue.Queue[tuple[Any, concurrent.futures.Future]]" = queue.Queue()
         self._batch_interval = batch_interval
         self._batch_size = batch_size
@@ -151,14 +153,14 @@ class SharedLLM:
             raise AttributeError(f"Underlying LLM client {type(self._client)} does not support bind_tools.")
 
 
-# Singleton shared LLM instance
-_SHARED_LLM: Optional[SharedLLM] = None
+# Cache of SharedLLM instances by model name
+_LLM_CACHE: dict[Optional[str], SharedLLM] = {}
 
 
-def get_llm() -> SharedLLM:
-    """Return the shared LLM wrapper instance."""
-    global _SHARED_LLM
-    if _SHARED_LLM is None:
-        _SHARED_LLM = SharedLLM()
-    return _SHARED_LLM
+def get_llm(model_name: Optional[str] = None) -> SharedLLM:
+    """Return a cached SharedLLM wrapper instance for the specified model_name."""
+    global _LLM_CACHE
+    if model_name not in _LLM_CACHE:
+        _LLM_CACHE[model_name] = SharedLLM(model_name=model_name)
+    return _LLM_CACHE[model_name]
 

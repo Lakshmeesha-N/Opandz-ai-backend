@@ -36,5 +36,12 @@ Your responsibilities:
 - Continue this process until the document validates successfully.
 - Never save or finish with an invalid document.
 - Keep all unrelated document behavior unchanged.
+
+REQUIRED EXECUTION STEPS:
+1. Call get_available_functions to find the target function names.
+2. Call get_function_code using the target function name to read its code.
+3. Apply edits by calling replace_function_code.
+4. Call validate_docxjs immediately after editing.
+5. If validation fails, read the error, call replace_function_code to fix it, and validate again. Do not finish until validation passes.
 """
     )

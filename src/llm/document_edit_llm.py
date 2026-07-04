@@ -19,7 +19,9 @@ from src.agents.document_edit_agent.tools.validate_docxjs import (
 )
 
 
-document_edit_llm = get_llm().bind_tools(
+from src.core.config import settings
+
+document_edit_llm = get_llm(settings.document_edit_llm_model).bind_tools(
     [
         get_available_functions,
         get_function_code,
