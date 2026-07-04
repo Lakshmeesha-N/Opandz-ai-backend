@@ -118,13 +118,17 @@ class SharedLLM:
                 time.sleep(0.1)
 
     def invoke(self, prompt: Any, timeout: Optional[float] = None) -> Any:
-        """Synchronous invoke used by existing nodes.
-
-        Submits the prompt to the background worker and waits for the result.
-        """
-        fut = concurrent.futures.Future()
-        self._queue.put((prompt, fut))
-        return fut.result(timeout=timeout)
+        """Invoke the client directly, avoiding thread queue issues in spawned processes."""
+        res = self._call_client(prompt)
+        if res and hasattr(res, "content") and isinstance(res.content, list):
+            text_parts = []
+            for part in res.content:
+                if isinstance(part, dict):
+                    text_parts.append(part.get("text", ""))
+                else:
+                    text_parts.append(str(part))
+            res.content = "".join(text_parts)
+        return res
 
     async def ainvoke(self, prompt: Any, timeout: Optional[float] = None) -> Any:
         """Async wrapper around `invoke`.
