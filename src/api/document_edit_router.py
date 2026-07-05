@@ -181,9 +181,17 @@ def _run_graph_inproc(
         result_state = res.get("result_state")
         if isinstance(result_state, dict) and "messages" in result_state:
             for m in reversed(result_state["messages"]):
-                m_type = getattr(m, "type", "")
-                if m_type == "ai" and not getattr(m, "tool_calls", None) and getattr(m, "content", ""):
-                    agent_output = str(m.content)
+                if isinstance(m, dict):
+                    m_type = m.get("role") or m.get("type") or ""
+                    m_content = m.get("content") or ""
+                    m_tool_calls = m.get("tool_calls")
+                else:
+                    m_type = getattr(m, "type", "")
+                    m_content = getattr(m, "content", "")
+                    m_tool_calls = getattr(m, "tool_calls", None)
+
+                if m_type in ("ai", "assistant") and not m_tool_calls and m_content:
+                    agent_output = str(m_content)
                     break
 
         JOBS[job_id]["status"] = status
@@ -248,7 +256,29 @@ async def get_status(
     """
     Poll job status and results from Redis, falling back to in-process memory.
     """
-    # 1. Try reading from Redis first
+    # 1. Check Firestore first (RQ worker writes status here)
+    try:
+        from src.core import firebase
+        firebase.ensure_globals()
+        db = firebase.db
+        if db:
+            doc = db.collection("jobs").document(job_id).get()
+            if doc.exists:
+                job_data = doc.to_dict()
+                status = job_data.get("status")
+                if status in ("running", "queued"):
+                    return {"status": status}
+                result = job_data.get("result") or {}
+                return {
+                    "status": status,
+                    "generated_docxjs_code": result.get("generated_docxjs_code") or job_data.get("generated_docxjs_code") or "",
+                    "error": job_data.get("error") or result.get("error") or "",
+                    "agent_output": result.get("agent_output") or job_data.get("agent_output") or ""
+                }
+    except Exception:
+        logging.exception("Failed to read job status from Firestore for job %s", job_id)
+
+    # 2. Try reading from Redis
     result = get_job_result(job_id)
     if result:
         if result["status"] in ("running", "queued"):

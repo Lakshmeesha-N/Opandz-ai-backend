@@ -153,13 +153,19 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
                 cleanup_temp_file(f_path)
 
         if job_id:
-            agent_output = ""
-            # Extract final AI response for the frontend and remove messages to keep payload light
             if isinstance(result, dict) and "messages" in result:
                 for m in reversed(result["messages"]):
-                    m_type = getattr(m, "type", "")
-                    if m_type == "ai" and not getattr(m, "tool_calls", None) and getattr(m, "content", ""):
-                        agent_output = str(m.content)
+                    if isinstance(m, dict):
+                        m_type = m.get("role") or m.get("type") or ""
+                        m_content = m.get("content") or ""
+                        m_tool_calls = m.get("tool_calls")
+                    else:
+                        m_type = getattr(m, "type", "")
+                        m_content = getattr(m, "content", "")
+                        m_tool_calls = getattr(m, "tool_calls", None)
+                    
+                    if m_type in ("ai", "assistant") and not m_tool_calls and m_content:
+                        agent_output = str(m_content)
                         result["agent_output"] = agent_output
                         break
                 result = {k: v for k, v in result.items() if k != "messages"}
