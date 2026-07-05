@@ -35,8 +35,8 @@ def save_chat_history(document_id: str, result: Dict[str, Any]):
             if content:
                 clean_messages.append({"role": m_type, "content": str(content)})
         
-        # Keep only the last 5 messages to prevent bloat
-        clean_messages = clean_messages[-5:]
+        # Keep only the last 6 messages (3 complete turns) to prevent orphaned message pairs
+        clean_messages = clean_messages[-6:]
         
         db.collection("document_chats").document(document_id).set({
             "messages": clean_messages
