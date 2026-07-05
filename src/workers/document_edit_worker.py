@@ -93,12 +93,21 @@ def run_document_edit_graph(payload: Dict[str, Any]):
 async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
     from src.agents.document_edit_agent.graph import graph as document_edit_graph
     from src.agents.document_edit_agent.helpers.redis_store import save_job_result
+    from src.agents.document_edit_agent.helpers.chat_history import fetch_chat_history, save_chat_history
     from src.utils.cleanup import cleanup_temp_file
+    from src.core import firebase
+    
+    db = firebase.db
 
     temp_file_path = None
     generated_code = ""
     status = "completed"
     error_msg = None
+    
+    document_id = payload.get("document_id", "")
+    
+    # 1. Fetch chat history from Firestore using helper
+    chat_history = fetch_chat_history(document_id)
 
     # Seed job document so the API can poll status (non-blocking)
     if job_id:
@@ -109,12 +118,12 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
         initial_state = {
             "lawyer_id": payload.get("lawyer_id", ""),
             "template_id": payload.get("template_id", ""),
-            "document_id": payload.get("document_id", ""),
+            "document_id": document_id,
             "user_message": payload.get("user_message", ""),
             "temp_file_path": "",
             "document_config": {},
             "blueprint": {},
-            "messages": payload.get("messages", []),
+            "messages": chat_history,
             "uploaded_files": payload.get("uploaded_files", []),
             "error": None,
         }
@@ -134,6 +143,10 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
                 if result.get("error"):
                     error_msg = result["error"]
                     status = "failed"
+                    
+                # 2. Extract and clean the updated history using helper
+                save_chat_history(document_id, result)
+                        
         finally:
             cleanup_temp_file(temp_file_path)
             for f_path in payload.get("uploaded_files", []):
@@ -141,6 +154,9 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
 
         if job_id:
             save_job_result(job_id, status, generated_code, error_msg)
+            # Remove "messages" from result before saving to jobs table to keep it light
+            if isinstance(result, dict) and "messages" in result:
+                result = {k: v for k, v in result.items() if k != "messages"}
             update_job_in_firestore(job_id, status, result=result)
 
         return result
