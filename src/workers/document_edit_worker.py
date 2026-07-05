@@ -153,15 +153,18 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
                 cleanup_temp_file(f_path)
 
         if job_id:
-            save_job_result(job_id, status, generated_code, error_msg)
+            agent_output = ""
             # Extract final AI response for the frontend and remove messages to keep payload light
             if isinstance(result, dict) and "messages" in result:
                 for m in reversed(result["messages"]):
                     m_type = getattr(m, "type", "")
                     if m_type == "ai" and not getattr(m, "tool_calls", None) and getattr(m, "content", ""):
-                        result["agent_output"] = str(m.content)
+                        agent_output = str(m.content)
+                        result["agent_output"] = agent_output
                         break
                 result = {k: v for k, v in result.items() if k != "messages"}
+                
+            save_job_result(job_id, status, generated_code, error_msg, agent_output)
             update_job_in_firestore(job_id, status, result=result)
 
         return result

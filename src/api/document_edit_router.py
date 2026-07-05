@@ -143,6 +143,7 @@ async def start_document_edit(
         "status": "queued",
         "generated_docxjs_code": "",
         "error": None,
+        "agent_output": "",
     }
     save_job_result(job_id, "queued")
 
@@ -175,11 +176,22 @@ def _run_graph_inproc(
     try:
         res = asyncio.run(_run_graph_async_inproc(payload))
         status = "failed" if res.get("error") else "completed"
+        
+        agent_output = ""
+        result_state = res.get("result_state")
+        if isinstance(result_state, dict) and "messages" in result_state:
+            for m in reversed(result_state["messages"]):
+                m_type = getattr(m, "type", "")
+                if m_type == "ai" and not getattr(m, "tool_calls", None) and getattr(m, "content", ""):
+                    agent_output = str(m.content)
+                    break
+
         JOBS[job_id]["status"] = status
         JOBS[job_id]["generated_docxjs_code"] = res["generated_docxjs_code"]
         JOBS[job_id]["error"] = res["error"]
+        JOBS[job_id]["agent_output"] = agent_output
         
-        save_job_result(job_id, status, res["generated_docxjs_code"], res["error"])
+        save_job_result(job_id, status, res["generated_docxjs_code"], res["error"], agent_output)
     except Exception as e:
         logging.exception(
             "Document edit inproc job failed %s",
@@ -244,7 +256,8 @@ async def get_status(
         return {
             "status": result["status"],
             "generated_docxjs_code": result["generated_docxjs_code"],
-            "error": result.get("error")
+            "error": result.get("error"),
+            "agent_output": result.get("agent_output")
         }
 
     # 2. Fallback: Check local JOBS memory store
@@ -261,7 +274,8 @@ async def get_status(
     return {
         "status": job["status"],
         "generated_docxjs_code": job["generated_docxjs_code"],
-        "error": job["error"]
+        "error": job["error"],
+        "agent_output": job.get("agent_output")
     }
 
 

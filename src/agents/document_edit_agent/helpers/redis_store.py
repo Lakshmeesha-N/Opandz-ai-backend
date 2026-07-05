@@ -5,7 +5,7 @@ import logging
 from typing import Optional, Dict, Any
 from src.queues.redis_client import get_redis
 
-def save_job_result(job_id: str, status: str, generated_docxjs_code: str = "", error: Optional[str] = None) -> None:
+def save_job_result(job_id: str, status: str, generated_docxjs_code: str = "", error: Optional[str] = None, agent_output: Optional[str] = None) -> None:
     """
     Saves the job result/status to Redis with a TTL of 1 hour.
     """
@@ -15,7 +15,8 @@ def save_job_result(job_id: str, status: str, generated_docxjs_code: str = "", e
             data = {
                 "status": status,
                 "generated_docxjs_code": generated_docxjs_code,
-                "error": error or ""
+                "error": error or "",
+                "agent_output": agent_output or ""
             }
             key = f"document_edit:result:{job_id}"
             conn.setex(key, 3600, json.dumps(data))
