@@ -21,7 +21,7 @@ PLAN_CONSTRAINTS: dict[str, PlanConstraints] = {
     "premium": {
         "max_pages": 50,
         "max_tokens_4h": 250_000,
-        "max_reference_pages": 100,
+        "max_reference_pages": 20,
     },
 }
 

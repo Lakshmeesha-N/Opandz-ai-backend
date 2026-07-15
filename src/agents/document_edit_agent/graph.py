@@ -117,6 +117,8 @@ builder.add_edge("edit_tools", "document_edit_agent")
 
 # Compile the unified graph
 document_edit_graph = builder.compile()
+graph = document_edit_graph
+
 
 
 if __name__ == "__main__":
