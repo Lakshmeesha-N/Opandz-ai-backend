@@ -9,16 +9,19 @@ from typing import TypedDict
 class PlanConstraints(TypedDict):
     max_pages: int
     max_tokens_4h: int
+    max_reference_pages: int
 
 
 PLAN_CONSTRAINTS: dict[str, PlanConstraints] = {
     "free": {
         "max_pages": 10,
         "max_tokens_4h": 50_000,
+        "max_reference_pages": 5,
     },
     "premium": {
         "max_pages": 50,
         "max_tokens_4h": 250_000,
+        "max_reference_pages": 100,
     },
 }
 

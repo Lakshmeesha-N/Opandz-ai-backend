@@ -12,6 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, File, Up
 from pydantic import BaseModel
 
 from src.auth.firebase_auth import CurrentUser, get_current_user
+from src.api.dependencies.plan_limits import check_reference_files_page_limit
 
 from src.agents.document_edit_agent.graph import graph as document_edit_graph
 from src.utils.cleanup import cleanup_temp_file
@@ -48,6 +49,7 @@ async def start_document_edit(
     messages: Optional[str] = Form("[]"),
     files: List[UploadFile] = File(default=[]),
     current_user: CurrentUser = Depends(get_current_user),
+    plan_info: dict = Depends(check_reference_files_page_limit),
 ):
     """
     Trigger a Document Edit Agent run.

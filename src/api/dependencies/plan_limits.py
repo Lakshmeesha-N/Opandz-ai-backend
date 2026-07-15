@@ -13,6 +13,7 @@
 import logging
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
+from typing import List
 
 from fastapi import Depends, File, HTTPException, UploadFile, status
 from docx import Document
@@ -101,3 +102,61 @@ async def check_uploaded_file_page_limit(
         )
 
     return {"plan": plan, "pages": pages}
+
+
+async def check_reference_files_page_limit(
+    files: List[UploadFile] = File(default=[]),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """
+    FastAPI dependency that counts the pages in all uploaded reference files combined
+    and enforces the plan's max_reference_pages limit.
+    """
+    if not files:
+        return {"plan": _resolve_active_plan(current_user.uid), "pages": 0}
+
+    uid = current_user.uid
+    plan = _resolve_active_plan(uid)
+    constraints = get_plan_constraints(plan)
+    max_reference_pages = constraints.get("max_reference_pages", 5)
+
+    total_pages = 0
+
+    for file in files:
+        if not file.filename:
+            continue
+            
+        file_bytes = await file.read()
+        await file.seek(0)
+        
+        filename = file.filename or ""
+        try:
+            if filename.lower().endswith(".pdf"):
+                import PyPDF2
+                reader = PyPDF2.PdfReader(BytesIO(file_bytes))
+                total_pages += len(reader.pages)
+            elif filename.lower().endswith(".docx"):
+                doc = Document(BytesIO(file_bytes))
+                total_pages += doc.core_properties.pages or 1
+        except Exception:
+            logger.exception("[plan_limits] Failed to read page count from reference file: %s", filename)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not read the uploaded reference file: {filename}. Please ensure it is a valid DOCX or PDF.",
+            )
+
+    logger.info(
+        "[plan_limits] uid=%s plan=%s total_reference_pages=%d max_reference_pages=%d",
+        uid, plan, total_pages, max_reference_pages,
+    )
+
+    if total_pages > max_reference_pages:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Your reference documents total {total_pages} pages, which exceeds the {max_reference_pages}-page limit "
+                f"for the {plan} plan. Please upgrade to Premium to upload larger reference files."
+            ),
+        )
+
+    return {"plan": plan, "pages": total_pages}

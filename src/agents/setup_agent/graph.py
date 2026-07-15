@@ -8,6 +8,10 @@ from src.agents.setup_agent.nodes.load_document import (
     load_document,
 )
 
+from src.agents.setup_agent.nodes.convert_pdf import (
+    convert_pdf_node,
+)
+
 from src.agents.setup_agent.nodes.extract_docx_blueprint import (
     extract_docx_blueprint,
 )
@@ -57,6 +61,11 @@ graph.add_node(
 )
 
 graph.add_node(
+    "convert_pdf",
+    convert_pdf_node,
+)
+
+graph.add_node(
     "extract_docx_blueprint",
     extract_docx_blueprint,
 )
@@ -85,9 +94,15 @@ graph.add_conditional_edges(
     route_document,
     {
         "docx": "extract_docx_blueprint",
+        "pdf": "convert_pdf",
         "error": END,
-        # "pdf": "extract_pdf_blueprint"  # add later
     },
+)
+
+# After PDF conversion, proceed to DOCX extraction
+graph.add_edge(
+    "convert_pdf",
+    "extract_docx_blueprint",
 )
 
 

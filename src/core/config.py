@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     vision_llm_model: Optional[str] = Field(None, env="VISION_LLM_MODEL")
     docx_llm_model: Optional[str] = Field(None, env="DOCX_LLM_MODEL")
     document_edit_llm_model: Optional[str] = Field("gemini-2.5-flash", env="DOCUMENT_EDIT_LLM_MODEL")
+    router_model: Optional[str] = Field("gemini-2.5-flash", env="ROUTER_MODEL")
     max_doc_pages: int = Field(6, env="MAX_DOC_PAGES")
     doc_gen_max_retries: int = Field(3, env="DOC_GEN_MAX_RETRIES")
     doc_edit_max_retries: int = Field(2, env="DOC_EDIT_MAX_RETRIES")

@@ -52,11 +52,11 @@ async def start_setup(
     - Otherwise: runs the job in a FastAPI background task (single-process fallback).
     """
     filename = file.filename or ""
-    # Validate file type (must be docx)
-    if not filename.lower().endswith(".docx"):
+    # Validate file type (must be docx or pdf)
+    if not filename.lower().endswith((".docx", ".pdf")):
         raise HTTPException(
             status_code=400,
-            detail="Only DOCX files are supported for Blueprint Creation."
+            detail="Only DOCX and PDF files are supported for Blueprint Creation."
         )
 
     # Validate file size (must not exceed 1 MB)

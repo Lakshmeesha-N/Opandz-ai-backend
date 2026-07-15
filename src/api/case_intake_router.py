@@ -12,6 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, File, Up
 from pydantic import BaseModel
 
 from src.auth.firebase_auth import CurrentUser, get_current_user
+from src.api.dependencies.plan_limits import check_reference_files_page_limit
 
 from src.orchestrators.document_orchestrator import (
     document_orchestrator,
@@ -46,6 +47,7 @@ async def start_intake(
     chat_history: Optional[str] = Form("[]"),
     files: List[UploadFile] = File(default=[]),
     current_user: CurrentUser = Depends(get_current_user),
+    plan_info: dict = Depends(check_reference_files_page_limit),
 ):
     """
     Trigger a Case Intake Agent run.
