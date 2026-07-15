@@ -27,7 +27,7 @@ async def validate_docxjs(
 
     process = await asyncio.create_subprocess_exec(
         "node",
-        "src/agents/document_edit_agent/scripts/validate_docxjs.js",
+        "src/agents/document_edit_agent/sub_agents/document_section_edit/scripts/validate_docxjs.js",
         temp_file_path,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,

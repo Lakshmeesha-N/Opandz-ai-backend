@@ -73,6 +73,7 @@ def run_graph(payload: Dict[str, Any]):
                 lawyer_id=payload.get("lawyer_id", ""),
                 vault_name=payload.get("vault_name", ""),
                 template_name=payload.get("template_name", ""),
+                pages=payload.get("pages", 0),
             )
         except Exception:
             logging.exception("Failed to write template registry entry on success")

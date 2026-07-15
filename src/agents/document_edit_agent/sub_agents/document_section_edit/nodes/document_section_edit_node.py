@@ -1,15 +1,15 @@
-# src/agents/document_edit_agent/nodes/document_edit_agent_node.py
+# src/agents/document_edit_agent/nodes/document_section_edit_node.py
 
 import logging
 from langchain_core.messages import (
     HumanMessage,
 )
 
-from src.agents.document_edit_agent.schema.global_state import (
+from src.agents.document_edit_agent.sub_agents.document_section_edit.schema.state import (
     AgentState,
 )
 
-from src.agents.document_edit_agent.prompts.system_prompt import (
+from src.agents.document_edit_agent.sub_agents.document_section_edit.prompts.system_prompt import (
     get_system_prompt,
 )
 
@@ -20,12 +20,12 @@ from src.llm.document_edit_llm import (
 logger = logging.getLogger(__name__)
 
 
-async def document_edit_agent_node(
+async def document_section_edit_node(
     state: AgentState,
 ) -> AgentState:
 
     try:
-        logger.info("[document_edit_agent_node] START")
+        logger.info("[document_section_edit_node] START")
 
         messages = state.get(
             "messages",
@@ -61,14 +61,14 @@ async def document_edit_agent_node(
                         last_validation_failed = False
 
         if validation_calls >= settings.doc_edit_max_retries and last_validation_failed:
-            logger.error("[document_edit_agent_node] Max validation attempts reached. Error: %s", last_validation_error)
+            logger.error("[document_section_edit_node] Max validation attempts reached. Error: %s", last_validation_error)
             raise ValueError(f"Max validation attempts ({settings.doc_edit_max_retries}) reached. Final error: {last_validation_error}")
 
-        logger.info("[document_edit_agent_node] Invoking document edit LLM with %d messages (validation_attempts=%d/%d)", len(messages), validation_calls, settings.doc_edit_max_retries)
+        logger.info("[document_section_edit_node] Invoking document edit LLM with %d messages (validation_attempts=%d/%d)", len(messages), validation_calls, settings.doc_edit_max_retries)
         response = await document_edit_llm.ainvoke(
             messages,
         )
-        logger.info("[document_edit_agent_node] LLM call complete")
+        logger.info("[document_section_edit_node] LLM call complete")
 
         return {
             "messages": [response],
@@ -76,7 +76,7 @@ async def document_edit_agent_node(
         }
 
     except Exception as e:
-        logger.exception("[document_edit_agent_node] ERROR: %s", str(e))
+        logger.exception("[document_section_edit_node] ERROR: %s", str(e))
         return {
             **state,
             "error": str(

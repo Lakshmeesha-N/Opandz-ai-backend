@@ -23,7 +23,7 @@ async def get_function_code(
 
     process = await asyncio.create_subprocess_exec(
         "node",
-        "src/agents/document_edit_agent/scripts/get_function_code.js",
+        "src/agents/document_edit_agent/sub_agents/document_section_edit/scripts/get_function_code.js",
         temp_file_path,
         function_name,
         stdout=asyncio.subprocess.PIPE,

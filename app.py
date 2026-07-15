@@ -1,5 +1,3 @@
-# src/app.py
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -27,13 +25,19 @@ from src.api.auth_router import (
     router as auth_router,
 )
 
+from src.api.middleware.usage_limit_middleware import UsageLimitMiddleware
+
 
 app = FastAPI(
     title="Opandz AI Backend",
     version="1.0.0",
 )
 
+# ── Middleware (registered in reverse order — last added = outermost) ──────
+# UsageLimitMiddleware: enforces 4-hour rolling token budget per user
+app.add_middleware(UsageLimitMiddleware)
 
+# CORSMiddleware: must be outermost so it handles preflight OPTIONS requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -47,6 +51,7 @@ app.add_middleware(
         "*",
     ],
 )
+
 
 
 @app.get(

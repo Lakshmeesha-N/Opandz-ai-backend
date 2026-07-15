@@ -59,6 +59,7 @@ def get_templates_in_vault(
             {
                 "template_id": data["template_id"],
                 "template_name": data["template_name"],
+                "pages": data.get("pages", 0),
             }
         )
 

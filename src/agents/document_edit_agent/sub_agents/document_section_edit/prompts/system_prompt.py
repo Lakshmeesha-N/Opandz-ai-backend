@@ -43,6 +43,8 @@ EDITING RULES
 - Preserve the existing code style, indentation, and architecture. Do not rename, restructure, or refactor unless strictly required.
 - Make the smallest possible change that correctly fulfills the user's request.
 - When changing a name, date, or any value, search and replace it across ALL functions in the document — not just the first occurrence. Every function that contains the old value must be updated.
+- CRITICAL: Always use `replace_multiple_functions_code` to apply edits — even when editing only a single function. Pass all required function replacements in one call as a list. Never call any replace tool more than once per editing step.
+- TOKEN COST — `get_all_document_text`: This tool returns the full text of every section and is expensive. Only call it when you cannot determine which function(s) to edit from the function list alone — for example, when you must search for a value whose location is unknown across many sections. If you already know the target function(s) from context or from `get_available_functions`, use `get_function_code` instead. Never call `get_all_document_text` as a default first step.
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

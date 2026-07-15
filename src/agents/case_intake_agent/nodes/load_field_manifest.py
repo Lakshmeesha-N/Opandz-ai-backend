@@ -43,6 +43,11 @@ async def load_field_manifest(
                 # Retain existing answers, defaulting to None only if empty
                 case_data[field_name] = existing_case_data.get(field_name, None)
 
+        # Preserve the accumulated important_information list across turns
+        case_data["important_information"] = existing_case_data.get(
+            "important_information", []
+        )
+
         return {
             **state,
             "field_manifest": field_manifest,

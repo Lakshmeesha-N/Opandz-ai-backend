@@ -3,7 +3,7 @@
 import tempfile
 import logging
 
-from src.agents.document_edit_agent.schema.global_state import (
+from src.agents.document_edit_agent.sub_agents.document_section_edit.schema.state import (
     AgentState,
 )
 
@@ -44,7 +44,7 @@ async def load_document_node(
 
         # Initialize Messages once for the graph
         from langchain_core.messages import convert_to_messages, HumanMessage
-        from src.agents.document_edit_agent.prompts.system_prompt import get_system_prompt
+        from src.agents.document_edit_agent.sub_agents.document_section_edit.prompts.system_prompt import get_system_prompt
 
         messages = state.get("messages", [])
         if messages:

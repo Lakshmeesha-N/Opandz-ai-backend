@@ -76,59 +76,20 @@ def _verify_token_sync(token: str) -> Dict[str, Any]:
 # FastAPI dependency
 # ---------------------------------------------------------------------------
 
-async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
-) -> CurrentUser:
+from fastapi import Request
+
+async def get_current_user(request: Request) -> CurrentUser:
     """
-    FastAPI dependency that validates a Firebase Bearer token.
-
-    - Extracts the token from ``Authorization: Bearer <token>``.
-    - Verifies it against Firebase Auth (async-safe via thread executor).
-    - Returns a :class:`CurrentUser` on success.
-    - Raises HTTP 401 on any failure.
+    FastAPI dependency that returns the authenticated user.
+    The actual Firebase token verification is now handled by UsageLimitMiddleware,
+    which attaches the CurrentUser object to request.state.
     """
-    _unauthorized = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or missing authentication token.",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-    # --- Guard: missing / malformed header ---
-    if credentials is None or not credentials.credentials:
-        raise _unauthorized
-
-    # --- Guard: SDK not available (misconfigured environment) ---
-    if not _HAS_AUTH or firebase_auth_module is None:
-        logger.error(
-            "firebase_admin is not installed; cannot verify token. "
-            "Install it or set ALLOW_FIREBASE_MOCKS=true for local testing."
-        )
+    user = getattr(request.state, "current_user", None)
+    if not user:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service is not configured.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
+    return user
 
-    initialize_firebase()
-    token = credentials.credentials
-
-    try:
-        # Run the blocking SDK call off the async event loop.
-        loop = asyncio.get_event_loop()
-        decoded = await loop.run_in_executor(None, _verify_token_sync, token)
-    except Exception as exc:
-        # Covers InvalidIdTokenError, ExpiredIdTokenError, RevokedIdTokenError,
-        # CertificateFetchError, and any unexpected error.
-        logger.warning("Token verification failed: %s", exc)
-        raise _unauthorized from exc
-
-    return CurrentUser(
-        uid=decoded["uid"],
-        email=decoded.get("email"),
-        email_verified=decoded.get("email_verified", False),
-        display_name=decoded.get("name"),
-        custom_claims={
-            k: v
-            for k, v in decoded.items()
-            if k not in {"uid", "email", "email_verified", "name", "iat", "exp", "aud", "iss", "sub"}
-        },
-    )

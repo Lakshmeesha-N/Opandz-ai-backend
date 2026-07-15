@@ -1,6 +1,6 @@
-from src.llm.llm import (
-    get_llm,
-)
+# src/agents/document_edit_agent/tool_node.py
+
+from langgraph.prebuilt import ToolNode
 
 from src.agents.document_edit_agent.sub_agents.document_section_edit.tools.get_available_functions import (
     get_available_functions,
@@ -10,8 +10,12 @@ from src.agents.document_edit_agent.sub_agents.document_section_edit.tools.get_f
     get_function_code,
 )
 
-from src.agents.document_edit_agent.sub_agents.document_section_edit.tools.replace_function_code import (
-    replace_function_code,
+from src.agents.document_edit_agent.sub_agents.document_section_edit.tools.get_all_document_text import (
+    get_all_document_text,
+)
+
+from src.agents.document_edit_agent.sub_agents.document_section_edit.tools.replace_multiple_functions_code import (
+    replace_multiple_functions_code,
 )
 
 from src.agents.document_edit_agent.sub_agents.document_section_edit.tools.validate_docxjs import (
@@ -19,13 +23,12 @@ from src.agents.document_edit_agent.sub_agents.document_section_edit.tools.valid
 )
 
 
-from src.core.config import settings
-
-document_edit_llm = get_llm(settings.document_edit_llm_model).bind_tools(
+tool_node = ToolNode(
     [
         get_available_functions,
         get_function_code,
-        replace_function_code,
+        get_all_document_text,
+        replace_multiple_functions_code,
         validate_docxjs,
     ],
 )

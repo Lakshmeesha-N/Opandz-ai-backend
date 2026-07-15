@@ -8,6 +8,7 @@ def create_template_registry_entry(
     lawyer_id: str,
     vault_name: str,
     template_name: str,
+    pages: int = 0,
 ) -> None:
 
     db = get_db()
@@ -21,7 +22,8 @@ def create_template_registry_entry(
             "lawyer_id": lawyer_id,
             "vault_name": vault_name,
             "template_name": template_name,
+            "pages": pages,
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow(),
         }
-    )
+    )

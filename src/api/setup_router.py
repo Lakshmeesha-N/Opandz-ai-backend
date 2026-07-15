@@ -18,6 +18,9 @@ from src.utils.create_template_registry_entry import (
     create_template_registry_entry,
 )
 from src.utils.cleanup import cleanup_temp_file
+from src.api.dependencies.plan_limits import (
+    check_uploaded_file_page_limit,
+)
 
 router = APIRouter(
     prefix="/agents/setup",
@@ -38,6 +41,7 @@ async def start_setup(
     template_id: Optional[str] = Form(""),
     file: UploadFile = File(...),
     current_user: CurrentUser = Depends(get_current_user),
+    plan_check: dict = Depends(check_uploaded_file_page_limit),
 ):
     """
     Trigger a Setup Agent run with an uploaded DOCX file.
@@ -74,6 +78,10 @@ async def start_setup(
 
     # Upload file to Firebase Storage organized by user
     # Path: uploads/setup/{lawyer_id}/{template_id}/{filename}
+    # Pages were already validated by the check_uploaded_file_page_limit dependency.
+    # The dependency already called file.seek(0), so we can safely read here.
+    pages = plan_check["pages"]
+
     file_bytes = await file.read()
     template_id_val = template_id or str(uuid.uuid4())
     gcs_path = f"uploads/setup/{current_user.uid}/{template_id_val}/{filename}"
@@ -101,6 +109,7 @@ async def start_setup(
         "template_name": template_name,
         "template_id": template_id_val,
         "lawyer_id": current_user.uid,
+        "pages": pages,
     }
 
     # Try Redis RQ first
@@ -175,6 +184,7 @@ def _run_graph_inproc(
             lawyer_id=payload["lawyer_id"],
             vault_name=payload["vault_name"],
             template_name=payload["template_name"],
+            pages=payload.get("pages", 0),
         )
 
         JOBS[job_id]["status"] = "completed"

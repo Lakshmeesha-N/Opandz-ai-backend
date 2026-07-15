@@ -22,7 +22,7 @@ async def get_available_functions(
 
     process = await asyncio.create_subprocess_exec(
         "node",
-        "src/agents/document_edit_agent/scripts/parser_ast.js",
+        "src/agents/document_edit_agent/sub_agents/document_section_edit/scripts/parser_ast.js",
         temp_file_path,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
