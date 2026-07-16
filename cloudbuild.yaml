@@ -2,13 +2,17 @@
 # cloudbuild.yaml — Opandz Legal AI Backend
 # =============================================================================
 #
-# Strategy: BUILD ONCE → DEPLOY
+# Strategy: BUILD ONCE → DEPLOY EVERYWHERE
 # ─────────────────────────────────────────
 # A single Docker image is built and pushed to Artifact Registry.
-# The Web API is deployed from this image. Background tasks run in-process.
+# All four Cloud Run services are then deployed from the EXACT same image
+# digest, guaranteeing that the Web API and every Worker are always in sync.
 #
 # Services deployed:
 #   1. backend-api            → uvicorn (FastAPI web server)
+#   2. setup-worker           → python -m src.workers.setup_worker
+#   3. intake-worker          → python -m src.workers.intake_worker
+#   4. document-edit-worker   → python -m src.workers.document_edit_worker
 #
 # =============================================================================
 # HOW TO TRIGGER
@@ -47,12 +51,7 @@ substitutions:
 
   # Cloud Run Service Names
   _SERVICE_API:           "backend-api"
-  _SERVICE_DOC_EDIT:      "document-edit-worker"
-
-  # Scaling — Workers (single-threaded RQ workers)
-  _WORKER_MAX_INSTANCES: "2"
-  _WORKER_CPU:           "1"
-  _WORKER_MEMORY:        "1Gi"
+  _SERVICE_WORKER:        "unified-worker"
 
   # Cloud Run Runtime Config
   _SERVICE_ACCOUNT: "opandz-cloudrun-sa@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -62,16 +61,21 @@ substitutions:
   _LLM_MODEL:          "gemini-3.1-flash-lite"
   _VISION_LLM_MODEL:   "gemini-3.1-flash-lite"
   _DOCX_LLM_MODEL:     "gemini-3.1-flash-lite"
-  _DOCUMENT_EDIT_LLM_MODEL: "gemini-2.5-flash"
   _GCP_LOCATION:       "global"
 
   # Scaling — API
   _API_MAX_INSTANCES:    "10"
   _API_CONCURRENCY:      "80"
   _API_CPU:              "1"
-  _API_MEMORY:           "1Gi"  # Bumping memory slightly since it handles workers in-process
+  _API_MEMORY:           "512Mi"
 
-  # VPC Connector (Optional, only needed if accessing other private services)
+  # Scaling — Unified Worker (CPU Instance)
+  _WORKER_MAX_INSTANCES: "3"
+  _WORKER_CONCURRENCY:   "1"
+  _WORKER_CPU:           "1"
+  _WORKER_MEMORY:        "1Gi"
+
+  # VPC Connector (for Memorystore Redis access)
   _VPC_CONNECTOR:        "my-connector"
 
 # =============================================================================
@@ -106,24 +110,37 @@ steps:
         echo " Repo     : ${_REPOSITORY}"
         echo " Image    : ${_IMAGE_NAME}"
         echo " Commit   : ${SHORT_SHA}"
+        echo " VPC Conn : ${_VPC_CONNECTOR}"
         echo "============================================"
 
   # ---------------------------------------------------------------------------
   # Step 1 — BUILD the Docker image (executed exactly ONCE)
+  #
+  # Tagged with both:
+  #   - SHORT_SHA  → immutable, pinned to this exact commit
+  #   - latest     → mutable convenience pointer
+  #
+  # Layer caching is enabled via --cache-from latest, dramatically reducing
+  # build time on repeated deploys when dependencies haven't changed.
   # ---------------------------------------------------------------------------
   - id: "build-image"
     name: "gcr.io/cloud-builders/docker"
+    entrypoint: "bash"
     args:
-      - "build"
-      - "--tag=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
-      - "--tag=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:latest"
-      - "--cache-from=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:latest"
-      - "--build-arg=BUILDKIT_INLINE_CACHE=1"
-      - "."
+      - "-c"
+      - |
+        docker build \
+          --cache-from "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:latest" \
+          -t "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}" \
+          -t "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:latest" \
+          .
     waitFor: ["info"]
 
   # ---------------------------------------------------------------------------
   # Step 2 — PUSH both tags to Artifact Registry
+  #
+  # All downstream deploy steps reference the immutable SHORT_SHA tag so every
+  # service runs byte-for-byte the same image.
   # ---------------------------------------------------------------------------
   - id: "push-image"
     name: "gcr.io/cloud-builders/docker"
@@ -134,7 +151,12 @@ steps:
     waitFor: ["build-image"]
 
   # ---------------------------------------------------------------------------
-  # Step 3 — DEPLOY: backend-api (FastAPI / uvicorn)
+  # Step 3a — DEPLOY: backend-api (FastAPI / uvicorn)
+  #
+  # Public-facing HTTP service. Deployed with --no-traffic first so the new
+  # revision can be verified before receiving live traffic (Step 4 migrates it).
+  #
+  # Command override:  uvicorn app:app --host 0.0.0.0 --port 8080
   # ---------------------------------------------------------------------------
   - id: "deploy-backend-api"
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
@@ -142,68 +164,71 @@ steps:
     args:
       - "-c"
       - |
+        # Detect whether the service already exists.
+        # --no-traffic is only valid on UPDATE (existing service), not CREATE.
         if gcloud run services describe "${_SERVICE_API}" \
              --region="${_REGION}" --platform=managed \
              --project="${PROJECT_ID}" > /dev/null 2>&1; then
+          echo "Service ${_SERVICE_API} exists. Deploying with --no-traffic..."
           NO_TRAFFIC_FLAG="--no-traffic"
-          echo "Service exists — deploying with --no-traffic (Step 4 will cut over)."
         else
+          echo "Service ${_SERVICE_API} does not exist. Creating..."
           NO_TRAFFIC_FLAG=""
-          echo "New service — deploying without --no-traffic (traffic goes live immediately)."
         fi
 
         gcloud run deploy "${_SERVICE_API}" \
           --image="${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}" \
           --region="${_REGION}" \
-          --platform=managed \
+          --platform="managed" \
           --service-account="${_SERVICE_ACCOUNT}" \
-          --command=uvicorn \
-          --args="app:app,--host,0.0.0.0,--port,8080" \
-          --port=8080 \
           --allow-unauthenticated \
           --cpu="${_API_CPU}" \
           --memory="${_API_MEMORY}" \
           --concurrency="${_API_CONCURRENCY}" \
           --max-instances="${_API_MAX_INSTANCES}" \
-          --vpc-connector="${_VPC_CONNECTOR}" \
-          --vpc-egress="private-ranges-only" \
-          --set-env-vars="LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},DOCUMENT_EDIT_LLM_MODEL=${_DOCUMENT_EDIT_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}" \
+          --set-env-vars="LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}" \
           --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest,FIREBASE_STORAGE_BUCKET=FIREBASE_STORAGE_BUCKET:latest" \
           $$NO_TRAFFIC_FLAG
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
-  # Step 3b — DEPLOY: document-edit-worker
+  # Step 3b — DEPLOY: unified-worker (Unified CPU worker running setup, intake, and doc-edit)
+  #
+  # Internal RQ worker running on CPU.
+  # Command override:  python -m src.workers.unified_worker
   # ---------------------------------------------------------------------------
-  - id: "deploy-document-edit-worker"
+  - id: "deploy-unified-worker"
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: "gcloud"
     args:
       - "run"
       - "deploy"
-      - "${_SERVICE_DOC_EDIT}"
+      - "${_SERVICE_WORKER}"
       - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE_NAME}:${SHORT_SHA}"
       - "--region=${_REGION}"
       - "--platform=managed"
       - "--service-account=${_SERVICE_ACCOUNT}"
       - "--command=python"
-      - "--args=-m,src.workers.document_edit_worker"
+      - "--args=-m,src.workers.unified_worker"
       - "--port=8080"
       - "--no-allow-unauthenticated"
       - "--cpu=${_WORKER_CPU}"
       - "--memory=${_WORKER_MEMORY}"
-      - "--concurrency=1"
-      - "--min-instances=0"
+      - "--concurrency=${_WORKER_CONCURRENCY}"
+      - "--min-instances=1"
       - "--max-instances=${_WORKER_MAX_INSTANCES}"
       - "--no-cpu-throttling"
       - "--vpc-connector=${_VPC_CONNECTOR}"
       - "--vpc-egress=private-ranges-only"
-      - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},DOCUMENT_EDIT_LLM_MODEL=${_DOCUMENT_EDIT_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
+      - "--set-env-vars=LLM_PROVIDER=${_LLM_PROVIDER},LLM_MODEL=${_LLM_MODEL},VISION_LLM_MODEL=${_VISION_LLM_MODEL},DOCX_LLM_MODEL=${_DOCX_LLM_MODEL},GCP_LOCATION=${_GCP_LOCATION}"
       - "--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,REDIS_URL=REDIS_URL:latest,FIREBASE_STORAGE_BUCKET=FIREBASE_STORAGE_BUCKET:latest"
     waitFor: ["push-image"]
 
   # ---------------------------------------------------------------------------
   # Step 4 — MIGRATE TRAFFIC to new backend-api revision
+  #
+  # Only after the API and the Unified Worker have deployed successfully does this
+  # step execute, cutting over 100% of production traffic to the new API revision.
   # ---------------------------------------------------------------------------
   - id: "migrate-traffic-api"
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
@@ -217,7 +242,7 @@ steps:
       - "--to-latest"
     waitFor:
       - "deploy-backend-api"
-      - "deploy-document-edit-worker"
+      - "deploy-unified-worker"
 
 # =============================================================================
 # ARTIFACT REGISTRY — final image references recorded in Cloud Build history
