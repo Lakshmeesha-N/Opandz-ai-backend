@@ -127,6 +127,8 @@ class UsageLimitMiddleware(BaseHTTPMiddleware):
                                 "[UsageLimitMiddleware] Failed to check expiry for uid=%s", uid
                             )
 
+                    from google.cloud.firestore import FieldFilter
+
                     # Check rolling 4-hour token budget
                     constraints = get_plan_constraints(plan)
                     max_tokens = constraints["max_tokens_4h"]
@@ -134,8 +136,8 @@ class UsageLimitMiddleware(BaseHTTPMiddleware):
 
                     usage_docs = (
                         db.collection("token_usage")
-                        .where("uid", "==", uid)
-                        .where("timestamp", ">=", four_hours_ago)
+                        .where(filter=FieldFilter("uid", "==", uid))
+                        .where(filter=FieldFilter("timestamp", ">=", four_hours_ago))
                         .stream()
                     )
                     total_used = sum(

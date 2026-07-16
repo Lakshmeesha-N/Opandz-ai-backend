@@ -112,10 +112,11 @@ async def fetch_documents_by_lawyer(
     from src.core.firebase import get_db
     import datetime
     try:
+        from google.cloud.firestore import FieldFilter
         db = get_db()
         docs = await asyncio.to_thread(
             lambda: list(db.collection("generated_documents")
-            .where("lawyer_id", "==", lawyer_id)
+            .where(filter=FieldFilter("lawyer_id", "==", lawyer_id))
             .stream())
         )
         

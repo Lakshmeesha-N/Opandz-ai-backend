@@ -17,10 +17,11 @@ def get_vaults(
 ):
     """Return all vault names owned by the authenticated user."""
 
+    from google.cloud.firestore import FieldFilter
     db = get_db()
     docs = (
         db.collection("template_registry")
-        .where("lawyer_id", "==", current_user.uid)
+        .where(filter=FieldFilter("lawyer_id", "==", current_user.uid))
         .stream()
     )
 
@@ -43,11 +44,12 @@ def get_templates_in_vault(
 ):
     """Return all templates inside a vault owned by the authenticated user."""
 
+    from google.cloud.firestore import FieldFilter
     db = get_db()
     docs = (
         db.collection("template_registry")
-        .where("lawyer_id", "==", current_user.uid)
-        .where("vault_name", "==", vault_name)
+        .where(filter=FieldFilter("lawyer_id", "==", current_user.uid))
+        .where(filter=FieldFilter("vault_name", "==", vault_name))
         .stream()
     )
 

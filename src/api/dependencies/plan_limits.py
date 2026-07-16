@@ -74,9 +74,9 @@ async def check_uploaded_file_page_limit(
     filename = file.filename or ""
     try:
         if filename.lower().endswith(".pdf"):
-            import PyPDF2
-            reader = PyPDF2.PdfReader(BytesIO(file_bytes))
-            pages = len(reader.pages)
+            import fitz
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            pages = doc.page_count
         else:
             doc = Document(BytesIO(file_bytes))
             pages = doc.core_properties.pages or 1
@@ -132,9 +132,9 @@ async def check_reference_files_page_limit(
         filename = file.filename or ""
         try:
             if filename.lower().endswith(".pdf"):
-                import PyPDF2
-                reader = PyPDF2.PdfReader(BytesIO(file_bytes))
-                total_pages += len(reader.pages)
+                import fitz
+                doc = fitz.open(stream=file_bytes, filetype="pdf")
+                total_pages += doc.page_count
             elif filename.lower().endswith(".docx"):
                 doc = Document(BytesIO(file_bytes))
                 total_pages += doc.core_properties.pages or 1
