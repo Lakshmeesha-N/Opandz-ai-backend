@@ -141,9 +141,16 @@ def extract_section_metadata(section) -> SectionMetadata:
         ),
         "orientation": (
             str(section.orientation)
-            if section.orientation
+            if section.orientation is not None
             else None
         ),
+        "section_break_type": (
+            str(section.start_type)
+            if section.start_type is not None
+            else None
+        ),
+        "header_linked_to_previous": section.header.is_linked_to_previous,
+        "footer_linked_to_previous": section.footer.is_linked_to_previous,
     }
 
 

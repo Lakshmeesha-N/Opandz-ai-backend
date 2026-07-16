@@ -167,19 +167,150 @@ CONTENT & VALUE RULES
    reintroducing a parameter to that function.
 
 ==================================================================
-DOCX.JS RULES
+DOCX.JS API RULES  (READ EVERY RULE — VIOLATIONS CAUSE RUNTIME ERRORS)
 ==================================================================
 
-1. Use DOCX.js constructs only.
-2. Generate valid JavaScript.
-3. Generate production-ready code.
-4. Include all required DOCX.js imports.
-5. Export every generated function.
-6. Every function must return valid DOCX.js elements.
-7. Avoid duplicate code whenever possible.
-8. Avoid circular dependencies.
-9. Ensure functions are self-contained and independently callable.
-10. Ensure generated code can be assembled later.
+IMPORTS
+-------
+1. Always import from "docx" at the top of the file.
+2. Every class you use MUST be in the import list. Never use an
+   undeclared identifier.
+3. The required base imports are:
+     import {{
+       Document, Packer, Paragraph, TextRun, Header, Footer,
+       Table, TableRow, TableCell, WidthType, AlignmentType,
+       HeadingLevel, BorderStyle, ShadingType, PageOrientation,
+       convertInchesToTwip, LevelFormat, UnderlineType,
+       SectionType, PageNumber, NumberFormat, ImageRun,
+       TableOfContents, ExternalHyperlink, InternalHyperlink,
+       Bookmark, Tab, Leader, TabStopType, TabStopLeader
+     }} from "docx";
+4. Only include imports that are actually used in the file.
+
+HEADER & FOOTER RULES  ← MOST COMMON SOURCE OF ERRORS
+------------------------------------------------------
+5. Header functions MUST return a `new Header({{ children: [...] }})`.
+   NEVER return a bare `Paragraph` or array from a header function.
+   CORRECT:
+     export function build_section_header() {{
+       return new Header({{ children: [new Paragraph({{ ... }})] }});
+     }}
+   WRONG (causes "Cannot read properties of undefined"):
+     export function build_section_header() {{
+       return new Paragraph({{ ... }});   // ← FORBIDDEN
+     }}
+
+6. Footer functions MUST return a `new Footer({{ children: [...] }})`.
+   NEVER return a bare `Paragraph` or array from a footer function.
+   CORRECT:
+     export function build_section_footer() {{
+       return new Footer({{ children: [new Paragraph({{ ... }})] }});
+     }}
+   WRONG:
+     export function build_section_footer() {{
+       return new Paragraph({{ ... }});   // ← FORBIDDEN
+     }}
+
+7. When assigning headers/footers in a Document section, always use
+   the result of the header/footer function directly:
+     headers: {{ default: build_section_header() }}
+     footers: {{ default: build_section_footer() }}
+   Never pass a Paragraph, array, or any other type there.
+
+PARAGRAPH RULES
+---------------
+8. Every Paragraph must use the object-form constructor:
+     new Paragraph({{ children: [...], ...options }})
+   NEVER use the deprecated string-form:
+     new Paragraph("text")   // ← FORBIDDEN — causes runtime errors
+
+9. Text content goes inside `TextRun` objects within `children`:
+     new Paragraph({{
+       children: [new TextRun({{ text: "Hello", bold: true }})]
+     }})
+
+10. `Paragraph` accepts these top-level options (not inside children):
+    - alignment, heading, spacing, indent, style, border, shading,
+      pageBreakBefore, keepNext, keepLines, outlineLevel, numbering,
+      tabStops, thematicBreak, contextualSpacing.
+
+TEXTRUN RULES
+-------------
+11. TextRun properties: text, bold, italics, underline, strike,
+    color, size, font, highlight, allCaps, smallCaps, break,
+    characterSpacing, vanish, specVanish, emphasisMark, language,
+    superScript, subScript.
+12. `size` is in half-points (e.g., 24 = 12pt, 28 = 14pt).
+13. `color` is a 6-digit hex string WITHOUT the "#" prefix:
+    CORRECT: color: "FF0000"   WRONG: color: "#FF0000"
+
+TABLE RULES
+-----------
+14. Table structure:
+      new Table({{
+        rows: [
+          new TableRow({{
+            children: [
+              new TableCell({{ children: [new Paragraph({{ children: [] }})] }}),
+            ]
+          }})
+        ]
+      }})
+15. Every TableCell MUST have at least one Paragraph in its children.
+    An empty TableCell MUST still contain: children: [new Paragraph({{}})]
+16. Width of columns uses WidthType:
+      width: {{ size: 50, type: WidthType.PERCENTAGE }}
+      width: {{ size: convertInchesToTwip(2), type: WidthType.DXA }}
+
+DOCUMENT / SECTION RULES
+--------------------------
+17. Document sections are defined as an array under the `sections` key:
+      new Document({{
+        sections: [
+          {{
+            properties: {{ ... }},
+            headers: {{ default: build_section_1_header() }},
+            footers: {{ default: build_section_1_footer() }},
+            children: [ ...build_01_group(), ...build_02_group() ]
+          }}
+        ]
+      }})
+18. `children` in a section is a flat array of Paragraph and Table
+    objects — never nested arrays. Spread group function results if they
+    return arrays: `...build_02_group()`.
+19. Section `properties` for page size/margins:
+      properties: {{
+        page: {{
+          margin: {{
+            top: convertInchesToTwip(1),
+            bottom: convertInchesToTwip(1),
+            left: convertInchesToTwip(1.25),
+            right: convertInchesToTwip(1.25),
+          }},
+          size: {{
+            width: convertInchesToTwip(8.5),
+            height: convertInchesToTwip(11),
+          }}
+        }}
+      }}
+
+SPACING RULES
+-------------
+20. Paragraph spacing uses twips. Use convertInchesToTwip() or
+    multiply points by 20 (1pt = 20 twips):
+      spacing: {{ before: 240, after: 120, line: 276, lineRule: "auto" }}
+
+GENERAL RULES
+-------------
+21. Use DOCX.js constructs only — no DOM, no Node.js fs, no Buffer.
+22. Generate valid JavaScript — all brackets, braces, and parentheses
+    must be balanced.
+23. Generate production-ready code with no TODO comments or stubs.
+24. Export every generated function with the `export` keyword.
+25. Avoid duplicate code — extract shared styles/options to const
+    variables at the top of the file.
+26. Avoid circular dependencies between functions.
+27. Ensure functions are self-contained and independently callable.
 
 ==================================================================
 ASSEMBLY RULES
@@ -193,18 +324,28 @@ This function must:
 
 1. Create document sections.
 2. Call all generated functions, each with no arguments.
-3. Preserve execution order.
+3. Preserve execution order — sections and groups in blueprint order.
 4. Preserve section ordering.
 5. Preserve header/footer ordering.
 6. Return a complete DOCX.js document.
 7. Return:
 
-   new Document({{...}})
+   new Document({{ sections: [ ... ] }})
 
-8. The returned Document must be directly executable without modification.
-9. The returned Document must support DOCX export.
-10. The returned Document must support real-time preview rendering.
-11. buildDocument itself takes no parameters — every value it needs
+8. headers and footers in each section object MUST use the wrapper
+   objects returned by build_..._header() and build_..._footer().
+   Example:
+     {{
+       headers: {{ default: build_section_1_header() }},
+       footers: {{ default: build_section_1_footer() }},
+       children: [ ...build_01_group(), ...build_02_group() ]
+     }}
+9. The returned Document must be directly executable without
+   modification — it must produce a valid .docx file when passed to
+   Packer.toBuffer().
+10. The returned Document must support DOCX export.
+11. The returned Document must support real-time preview rendering.
+12. buildDocument itself takes no parameters — every value it needs
     is already fully resolved inside the functions it calls.
 ==================================================================
 VALIDATION RULES

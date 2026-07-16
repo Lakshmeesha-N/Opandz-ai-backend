@@ -14,11 +14,27 @@ def parse_blueprint(blueprint: dict) -> dict:
         for area in ("header_blocks", "body_blocks", "footer_blocks"):
             for block in section.get(area, []):
                 is_table = block.get("block_type") == "table"
-                section_entry["blocks"].append({
+                paragraph_style = block.get("paragraph_style") or {}
+                block_entry = {
                     "block_id": block["block_id"],
                     "block_type": block["block_type"],
-                    "style_name": (block.get("paragraph_style") or {}).get("style_name"),
-                    "content": block.get("table_data") if is_table else block.get("content") or ""
+                    "area": area.replace("_blocks", ""),
+                    "style_name": paragraph_style.get("style_name"),
+                    "style_id": paragraph_style.get("style_id"),
+                    "content": block.get("table_data") if is_table else block.get("content") or "",
+                }
+
+                if paragraph_style.get("numbering"):
+                    block_entry["numbering"] = paragraph_style.get("numbering")
+                if paragraph_style.get("tab_stops"):
+                    block_entry["tab_stops"] = paragraph_style.get("tab_stops")
+                if paragraph_style.get("borders"):
+                    block_entry["paragraph_borders"] = paragraph_style.get("borders")
+                if block.get("image_slots"):
+                    block_entry["image_slots"] = block.get("image_slots")
+
+                section_entry["blocks"].append({
+                    **block_entry
                 })
 
         result["sections"].append(section_entry)
