@@ -21,9 +21,6 @@ async def map_evidence_to_fields(
     to the field manifest and updates case_data.
     """
 
-    if state.get("error"):
-        return state
-
     try:
 
         field_manifest = state["field_manifest"]
@@ -43,16 +40,10 @@ async def map_evidence_to_fields(
             {},
         )
 
-        # Preserve the existing important_information list for de-duplication
-        existing_important_information = current_case_data.get(
-            "important_information", []
-        )
-
         prompt = create_field_mapping_prompt(
             field_manifest=field_manifest,
             evidence=evidence,
             user_message=user_message,
-            existing_important_information=existing_important_information,
         )
 
         llm = get_llm()
@@ -80,16 +71,10 @@ async def map_evidence_to_fields(
             cleaned_content
         )
 
-        # Extract and append new important_information items
-        new_important_items = extracted_fields.pop("important_information", [])
-        if isinstance(new_important_items, list):
-            existing_important_information = existing_important_information + new_important_items
+        # Only update fields that
+        # already exist in case_data
 
-        # Update required fields — skip important_information (handled above)
         for key, value in extracted_fields.items():
-
-            if key == "important_information":
-                continue
 
             if (
                 key in current_case_data
@@ -98,14 +83,11 @@ async def map_evidence_to_fields(
             ):
                 current_case_data[key] = value
 
-        # Write the updated list back
-        current_case_data["important_information"] = existing_important_information
-
         return {
             **state,
             "case_data": current_case_data,
+            "error": None,
         }
-
 
     except Exception as e:
 
@@ -113,4 +95,3 @@ async def map_evidence_to_fields(
             **state,
             "error": str(e),
         }
-

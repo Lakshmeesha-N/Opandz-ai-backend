@@ -49,6 +49,25 @@ def _resolve_active_plan(uid: str) -> str:
     return plan
 
 
+def _get_docx_page_count(file_bytes: bytes) -> int:
+    """
+    Attempt to read the page count from docProps/app.xml inside the DOCX ZIP archive.
+    Defaults to 1 if not found or if parsing fails.
+    """
+    import zipfile
+    import re
+    try:
+        with zipfile.ZipFile(BytesIO(file_bytes)) as z:
+            if 'docProps/app.xml' in z.namelist():
+                app_xml = z.read('docProps/app.xml').decode('utf-8', errors='ignore')
+                match = re.search(r'<Pages>(\d+)</Pages>', app_xml)
+                if match:
+                    return max(1, int(match.group(1)))
+    except Exception:
+        logger.warning("[plan_limits] Failed to extract page count from DOCX, defaulting to 1")
+    return 1
+
+
 async def check_uploaded_file_page_limit(
     file: UploadFile = File(...),
     current_user: CurrentUser = Depends(get_current_user),
@@ -78,8 +97,7 @@ async def check_uploaded_file_page_limit(
             doc = fitz.open(stream=file_bytes, filetype="pdf")
             pages = doc.page_count
         else:
-            doc = Document(BytesIO(file_bytes))
-            pages = doc.core_properties.pages or 1
+            pages = _get_docx_page_count(file_bytes)
     except Exception:
         logger.exception("[plan_limits] Failed to read page count from uploaded file")
         raise HTTPException(
@@ -136,8 +154,7 @@ async def check_reference_files_page_limit(
                 doc = fitz.open(stream=file_bytes, filetype="pdf")
                 total_pages += doc.page_count
             elif filename.lower().endswith(".docx"):
-                doc = Document(BytesIO(file_bytes))
-                total_pages += doc.core_properties.pages or 1
+                total_pages += _get_docx_page_count(file_bytes)
         except Exception:
             logger.exception("[plan_limits] Failed to read page count from reference file: %s", filename)
             raise HTTPException(

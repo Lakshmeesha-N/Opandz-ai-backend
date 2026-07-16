@@ -1,4 +1,5 @@
 from src.core.config import settings
+import contextvars
 import threading
 import queue
 import time
@@ -176,8 +177,9 @@ class SharedLLM:
 
         If called from an asyncio loop, waits without blocking the loop.
         """
+        ctx = contextvars.copy_context()
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self.invoke, prompt, timeout)
+        return await loop.run_in_executor(None, lambda: ctx.run(self.invoke, prompt, timeout))
 
     def bind_tools(self, tools: list, **kwargs: Any) -> "SharedLLM":
         """Bind tools to the underlying client if supported, returning a new SharedLLM wrapper."""
