@@ -138,6 +138,10 @@ def _run_intake_inproc(job_id: str, payload: Dict[str, Any]):
     logging.info("Starting intake job (inproc) %s", job_id)
     JOBS[job_id]["status"] = "running"
     uploaded_files = payload.get("uploaded_files", [])
+
+    from src.utils.token_context import set_token_context, reset_token_context
+    uid_token, agent_token = set_token_context(payload.get("uid", ""), "case_intake")
+
     try:
         initial_state: AgentState = {
             "session_id": payload.get("session_id", ""),
@@ -171,6 +175,8 @@ def _run_intake_inproc(job_id: str, payload: Dict[str, Any]):
     finally:
         for file_path in uploaded_files:
             cleanup_temp_file(file_path)
+        reset_token_context(uid_token, agent_token)
+
 
 
 @router.get("/status/{job_id}")

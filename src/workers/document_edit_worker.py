@@ -77,17 +77,25 @@ def update_job_in_firestore(job_id: str, status: str, result: Any = None, error:
 def run_document_edit_graph(payload: Dict[str, Any]):
     """
     Worker entrypoint for running the Document Edit Agent graph.
-    Called by the \"document_edit\" RQ queue.
+    Called by the "document_edit" RQ queue.
     """
     from rq import get_current_job
     from src.core import firebase
+    from src.utils.token_context import set_token_context, reset_token_context
 
     job = get_current_job()
     job_id = job.id if job else None
 
     firebase.ensure_globals()
 
-    return asyncio.run(_run_graph_async(job_id, payload))
+    # ── Set token-tracking context for this job ───────────────────────────────
+    uid = payload.get("lawyer_id", "")
+    uid_token, agent_token = set_token_context(uid, "document_edit")
+
+    try:
+        return asyncio.run(_run_graph_async(job_id, payload))
+    finally:
+        reset_token_context(uid_token, agent_token)
 
 
 async def _run_graph_async(job_id: str, payload: Dict[str, Any]):

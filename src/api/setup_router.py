@@ -158,6 +158,9 @@ def _run_graph_inproc(
 
     JOBS[job_id]["status"] = "running"
 
+    from src.utils.token_context import set_token_context, reset_token_context
+    uid_token, agent_token = set_token_context(payload.get("lawyer_id", ""), "setup")
+
     try:
 
         template_id = (
@@ -203,6 +206,7 @@ def _run_graph_inproc(
         )
     finally:
         cleanup_temp_file(payload.get("file_path"))
+        reset_token_context(uid_token, agent_token)
 
 
 @router.get("/status/{job_id}")

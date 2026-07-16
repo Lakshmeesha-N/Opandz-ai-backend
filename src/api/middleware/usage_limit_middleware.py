@@ -94,7 +94,25 @@ class UsageLimitMiddleware(BaseHTTPMiddleware):
             },
         )
 
-        # ── 2. Usage Limit Check (only for /agents/ routes) ────────────────
+        # ── 2a. Set token-context ContextVars ─────────────────────────────────
+        # Derive agent name from the URL path so token logs are descriptive.
+        # e.g. /agents/intake/... → "case_intake", /agents/edit/... → "document_edit"
+        path = request.url.path
+        if "/intake" in path:
+            agent_name = "case_intake"
+        elif "/edit" in path:
+            agent_name = "document_edit"
+        elif "/setup" in path:
+            agent_name = "setup"
+        elif "/generate" in path or "/document" in path:
+            agent_name = "document_generation"
+        else:
+            agent_name = "unknown"
+
+        from src.utils.token_context import set_token_context, reset_token_context
+        uid_token, agent_token = set_token_context(uid, agent_name)
+
+        # ── 2b. Usage Limit Check (only for /agents/ routes) ────────────────
         if request.url.path.startswith("/agents/"):
             try:
                 from src.core.firebase import get_db
@@ -168,4 +186,9 @@ class UsageLimitMiddleware(BaseHTTPMiddleware):
                     uid,
                 )
 
-        return await call_next(request)
+        try:
+            return await call_next(request)
+        finally:
+            # Always clean up ContextVars so the next request on this thread
+            # starts with a blank context (important for thread-pool reuse).
+            reset_token_context(uid_token, agent_token)

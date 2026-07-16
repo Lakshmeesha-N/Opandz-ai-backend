@@ -26,12 +26,13 @@ from typing import Any, Dict
 def run_intake_graph(payload: Dict[str, Any]):
     """
     Worker entrypoint for running the Case Intake Agent graph.
-    Called by the \"intake\" RQ queue.
+    Called by the "intake" RQ queue.
     """
     from rq import get_current_job
     from src.core import firebase
     from src.orchestrators.document_orchestrator import document_orchestrator
     from src.utils.cleanup import cleanup_temp_file
+    from src.utils.token_context import set_token_context, reset_token_context
 
 
     job = get_current_job()
@@ -39,6 +40,10 @@ def run_intake_graph(payload: Dict[str, Any]):
 
     firebase.ensure_globals()
     db = firebase.db
+
+    # ── Set token-tracking context for this job ───────────────────────────────
+    uid = payload.get("uid", "")
+    uid_token, agent_token = set_token_context(uid, "case_intake")
 
     # Seed job document so the API can poll status
     if job_id and db:
@@ -108,6 +113,7 @@ def run_intake_graph(payload: Dict[str, Any]):
     finally:
         for file_path in uploaded_files:
             cleanup_temp_file(file_path)
+        reset_token_context(uid_token, agent_token)
 
 
 # ---------------------------------------------------------------------------

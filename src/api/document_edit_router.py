@@ -175,6 +175,9 @@ def _run_graph_inproc(
     JOBS[job_id]["status"] = "running"
     save_job_result(job_id, "running")
 
+    from src.utils.token_context import set_token_context, reset_token_context
+    uid_token, agent_token = set_token_context(payload.get("lawyer_id", ""), "document_edit")
+
     try:
         res = asyncio.run(_run_graph_async_inproc(payload))
         status = "failed" if res.get("error") else "completed"
@@ -210,6 +213,8 @@ def _run_graph_inproc(
         JOBS[job_id]["status"] = "failed"
         JOBS[job_id]["error"] = str(e)
         save_job_result(job_id, "failed", "", str(e))
+    finally:
+        reset_token_context(uid_token, agent_token)
 
 
 async def _run_graph_async_inproc(payload: Dict[str, Any]) -> Dict[str, Any]:

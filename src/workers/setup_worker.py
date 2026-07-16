@@ -36,12 +36,17 @@ def run_graph(payload: Dict[str, Any]):
     from src.core import firebase
     from src.agents.setup_agent.graph import setup_agent_graph
     from src.utils.cleanup import cleanup_temp_file
+    from src.utils.token_context import set_token_context, reset_token_context
 
     job = get_current_job()
     job_id = job.id if job else None
 
     firebase.ensure_globals()
     db = firebase.db
+
+    # ── Set token-tracking context for this job ───────────────────────────────
+    uid = payload.get("lawyer_id", "")
+    uid_token, agent_token = set_token_context(uid, "setup")
 
     # Seed job document so the API can poll status
     if job_id and db:
@@ -101,6 +106,7 @@ def run_graph(payload: Dict[str, Any]):
         raise
     finally:
         cleanup_temp_file(payload.get("file_path"))
+        reset_token_context(uid_token, agent_token)
 
 
 # ---------------------------------------------------------------------------

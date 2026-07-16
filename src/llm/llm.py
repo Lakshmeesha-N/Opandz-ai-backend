@@ -4,7 +4,10 @@ import queue
 import time
 import concurrent.futures
 import asyncio
+import logging
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def _create_underlying_client(model_name: Optional[str] = None):
@@ -119,6 +122,40 @@ class SharedLLM:
                 # avoid worker crash
                 time.sleep(0.1)
 
+    def _log_usage_in_background(self, res: Any) -> None:
+        """
+        Read token counts from a LangChain response and log them to Firestore
+        in a fire-and-forget background thread so the agent is never blocked.
+        """
+        try:
+            from src.utils.token_context import active_user_id, active_agent_name
+            from src.utils.token_logger import extract_tokens_from_response, log_agent_tokens
+
+            uid = active_user_id.get(None)
+            if not uid:
+                # No user context set — skip logging (e.g. health checks)
+                return
+
+            agent_name = active_agent_name.get("unknown")
+            prompt_tokens, completion_tokens = extract_tokens_from_response(res)
+
+            if prompt_tokens == 0 and completion_tokens == 0:
+                logger.debug(
+                    "[SharedLLM] No token counts found in response for uid=%s agent=%s",
+                    uid, agent_name,
+                )
+                return
+
+            # Fire-and-forget: run in a daemon thread so it never blocks the agent
+            threading.Thread(
+                target=log_agent_tokens,
+                args=(uid, agent_name, prompt_tokens, completion_tokens),
+                daemon=True,
+            ).start()
+
+        except Exception:
+            logger.debug("[SharedLLM] Token usage logging failed silently", exc_info=True)
+
     def invoke(self, prompt: Any, timeout: Optional[float] = None) -> Any:
         """Invoke the client directly, avoiding thread queue issues in spawned processes."""
         res = self._call_client(prompt)
@@ -130,6 +167,8 @@ class SharedLLM:
                 else:
                     text_parts.append(str(part))
             res.content = "".join(text_parts)
+        # Auto-log token usage for this LLM call
+        self._log_usage_in_background(res)
         return res
 
     async def ainvoke(self, prompt: Any, timeout: Optional[float] = None) -> Any:
