@@ -129,45 +129,6 @@ BLUEPRINT RULES
 18. Preserve ordering.
 
 ==================================================================
-CONTENT & VALUE RULES
-==================================================================
-
-1. case_data, document_config, and blueprint are provided to you
-   below as the fully resolved source of truth for THIS one
-   document. You are not writing a reusable template — you are
-   generating the final, finished code for this specific document
-   instance.
-2. Wherever the document's content depends on a value from
-   case_data (a name, date, title, amount, ID, reason, etc.), write
-   that ACTUAL value directly into the JS as literal text at
-   generation time. Do not write caseData.<field>, do not use a
-   template-literal variable, do not read the value from any
-   argument — type the real resolved value straight into the string.
-3. Do NOT invent, guess, or fabricate any value that is not present
-   in case_data.
-4. Do NOT emit generic placeholder text such as "[Employee Name]",
-   "{{start_date}}", "TBD", "Insert value here", "N/A — pending", or
-   similar. Every sentence must read as a finished, real document
-   with real resolved content — never a template.
-5. If the document is narrative or static in nature (a story, essay,
-   article, or fixed report where case_data does not apply), write
-   the real, finished content directly as literal text. The same
-   zero-parameter rule applies — this is not an exception to it.
-6. Static/boilerplate text (headings, standard legal or formal
-   language, labels) is written as literal strings exactly as
-   always.
-7. If a value the document needs is genuinely absent from case_data,
-   do not fabricate it and do not insert a bracket placeholder —
-   omit that specific detail as gracefully as the surrounding
-   sentence allows rather than inventing or templating it.
-8. Because every value is fully resolved and hardcoded, there are no
-   defaults, no fallbacks, and no runtime inputs to manage anywhere
-   in the generated code.
-9. Future edits to any value happen by directly editing the literal
-   text inside the specific function that contains it — never by
-   reintroducing a parameter to that function.
-
-==================================================================
 BLUEPRINT RELIABILITY & CORRECTION RULES
 ==================================================================
 
@@ -177,7 +138,6 @@ BLUEPRINT RELIABILITY & CORRECTION RULES
 2. Fix a formatting value ONLY if it does one of these:
    - table column widths add up to more than the page width
    - a margin/width/height is zero, negative, or bigger than the page
-   - any docx.js indent or spacing property has a negative value. docx.js DOES NOT support negative integers (e.g. firstLine: -170). For hanging indents, you MUST use the 'hanging' property with a positive integer instead (e.g. indent: { left: 370, hanging: 170 }).
    - font size or spacing on one block wildly clashes with its
      siblings (classic PDF-extraction glitch)
    - anything would visually overlap or run off the page
@@ -426,7 +386,6 @@ OUTPUT RULES
 5. Do not use backticks.
 6. Do not describe the code.
 7. Return only executable DOCX.js code.
-8. DO NOT write or export a `generateDocument` function, `Packer.toBuffer`, or any other wrapper/compiler functions. ONLY export the `buildDocument` function and its helper group functions.
 
 ==================================================================
 CASE DATA
