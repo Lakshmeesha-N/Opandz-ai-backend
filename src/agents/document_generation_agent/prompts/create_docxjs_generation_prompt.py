@@ -387,6 +387,7 @@ OUTPUT RULES
 5. Do not use backticks.
 6. Do not describe the code.
 7. Return only executable DOCX.js code.
+8. DO NOT write or export a `generateDocument` function, `Packer.toBuffer`, or any other wrapper/compiler functions. ONLY export the `buildDocument` function and its helper group functions.
 
 ==================================================================
 CASE DATA
