@@ -7,7 +7,7 @@ from pydantic import Field
 class Settings(BaseSettings):
     # LLM
     llm_provider: str = Field("gemini", env="LLM_PROVIDER")
-    llm_model: str = Field("gemini-3.5-flash", env="LLM_MODEL")
+    llm_model: str = Field("gemini-3.1-flash", env="LLM_MODEL")
     vision_llm_model: Optional[str] = Field(None, env="VISION_LLM_MODEL")
     docx_llm_model: Optional[str] = Field(None, env="DOCX_LLM_MODEL")
     document_edit_llm_model: Optional[str] = Field("gemini-2.5-flash", env="DOCUMENT_EDIT_LLM_MODEL")

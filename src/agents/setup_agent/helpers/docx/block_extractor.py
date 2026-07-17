@@ -5,6 +5,7 @@ from docx.text.paragraph import Paragraph
 from docx.text.run import Run as DocxRun
 from docx.table import Table, _Cell
 from docx.oxml.ns import qn
+from docx.enum.text import WD_LINE_SPACING
 
 from src.agents.setup_agent.schema.docx_schema import (
     Run,
@@ -189,29 +190,37 @@ def extract_runs(paragraph: Paragraph) -> List[Run]:
 
     paragraph.runs ONLY returns <w:r> elements that are direct children
     of <w:p>. Any run wrapped in <w:hyperlink> (which is how every
-    clickable phone/email/link in a resume or letterhead is stored) is
-    silently skipped by python-docx, so its text, style, and formatting
-    never made it into the blueprint. This is why hyperlinked contact
-    details previously extracted as empty strings.
+    clickable phone/email/link in a resume or letterhead is stored in
+    a normally-authored DOCX) is silently skipped by python-docx, so
+    its text, style, and formatting never made it into the blueprint.
 
-    This version includes hyperlink-wrapped runs and also captures the
-    resolved target URL, so downstream generation can reproduce real
-    clickable links instead of just styled plain text.
+    Some converters — pdf2docx in particular — additionally write
+    INVALID, reversed nesting: a <w:r> that itself contains a nested
+    <w:hyperlink>, instead of the other way around. Both directions
+    are handled below so hyperlink text is never silently dropped
+    regardless of which tool produced the source DOCX.
     """
     runs: List[Run] = []
 
+    def from_hyperlink(hyperlink_el):
+        url = _hyperlink_url(paragraph, hyperlink_el)
+        return [(r_el, url) for r_el in hyperlink_el.findall(qn("w:r"))]
+
     for child in paragraph._p:
         if child.tag == qn("w:r"):
-            run_elements = [(child, None)]
+            # Reversed/invalid nesting check: some converters put a
+            # <w:hyperlink> INSIDE the run instead of around it.
+            nested_hyperlink = child.find(qn("w:hyperlink"))
+            if nested_hyperlink is not None:
+                run_sources = from_hyperlink(nested_hyperlink)
+            else:
+                run_sources = [(child, None)]
         elif child.tag == qn("w:hyperlink"):
-            url = _hyperlink_url(paragraph, child)
-            run_elements = [
-                (r_el, url) for r_el in child.findall(qn("w:r"))
-            ]
+            run_sources = from_hyperlink(child)
         else:
             continue
 
-        for r_el, hyperlink_url in run_elements:
+        for r_el, hyperlink_url in run_sources:
             run = DocxRun(r_el, paragraph)
             runs.append(
                 {
@@ -259,20 +268,17 @@ def _reconstruct_content(runs: List[Run]) -> str:
 
 def _line_spacing_data(fmt) -> dict[str, Any] | None:
     """
-    Store line spacing as an explicit {value, rule} pair instead of a
-    bare float, because python-docx returns two DIFFERENT kinds of
-    number under the same property depending on the paragraph's rule:
+    Store line spacing as an explicit {value, unit, rule} triple.
 
-      - rule == MULTIPLE (or unset): fmt.line_spacing is a plain
-        multiplier, e.g. 1.0 = single spacing, 1.15, 2.0, etc.
-      - rule == EXACTLY / AT_LEAST: fmt.line_spacing is a Length
-        object representing an absolute distance (has .twips).
-
-    Previously both cases were collapsed into one float field with no
-    unit, so a downstream generator (an LLM writing DOCX.js spacing:
-    { line: ... }) could not tell a 0.97 multiplier apart from a twips
-    value. That ambiguity is what caused paragraphs to collapse and
-    overlap in generated output.
+    IMPORTANT: branch on fmt.line_spacing_rule, NOT on the Python type
+    of fmt.line_spacing. python-docx's Length objects (returned when
+    rule is EXACTLY or AT_LEAST) are a subclass of int, so a naive
+    `isinstance(value, (int, float))` check matches them too and
+    wrongly treats them as a bare multiplier — skipping the EMU-to-
+    twips conversion and leaking a huge raw internal number (e.g.
+    139700) downstream. That number then gets used as a line height
+    directly, which is what was blowing up spacing and creating blank
+    pages. Checking the rule first avoids this entirely.
     """
     value = fmt.line_spacing
     rule = fmt.line_spacing_rule
@@ -280,22 +286,22 @@ def _line_spacing_data(fmt) -> dict[str, Any] | None:
     if value is None:
         return None
 
-    if isinstance(value, (int, float)):
+    if rule in (WD_LINE_SPACING.EXACTLY, WD_LINE_SPACING.AT_LEAST):
+        twips = getattr(value, "twips", None)
+        if twips is None:
+            return None
         return {
-            "value": float(value),
-            "unit": "multiplier",
-            "rule": str(rule) if rule is not None else "MULTIPLE",
+            "value": twips,
+            "unit": "twips",
+            "rule": "EXACTLY" if rule == WD_LINE_SPACING.EXACTLY else "AT_LEAST",
         }
 
-    # Length object (EXACTLY / AT_LEAST) — has .twips
-    twips = getattr(value, "twips", None)
-    if twips is None:
-        return None
-
+    # MULTIPLE, SINGLE, ONE_POINT_FIVE, DOUBLE, or unset (defaults to
+    # MULTIPLE): value is a plain multiplier here.
     return {
-        "value": twips,
-        "unit": "twips",
-        "rule": str(rule) if rule is not None else "EXACTLY",
+        "value": float(value),
+        "unit": "multiplier",
+        "rule": str(rule) if rule is not None else "MULTIPLE",
     }
 
 

@@ -129,21 +129,22 @@ BLUEPRINT RULES
 18. Preserve ordering.
 
 ==================================================================
-BLUEPRINT RELIABILITY & CORRECTION RULES
+BLUEPRINT RELIABILITY
 ==================================================================
 
-1. Trust blueprint CONTENT (text, values, order) always. Trust its
-   FORMATTING numbers (widths, spacing, margins, font size) only if
-   they don't break the page.
-2. Fix a formatting value ONLY if it does one of these:
-   - table column widths add up to more than the page width
-   - a margin/width/height is zero, negative, or bigger than the page
-   - font size or spacing on one block wildly clashes with its
-     siblings (classic PDF-extraction glitch)
-   - anything would visually overlap or run off the page
-3. If none of the above apply, leave the blueprint value as-is.
-4. Fix with the smallest change that restores a valid layout — never
-   delete content, never comment on the fix in the output.
+The blueprint is ~95% reliable. Use it as-is by default. For the
+remaining ~5-10% — values that are clearly broken (overflow, zero/
+negative size, wild mismatch with siblings) — use your own judgment
+to produce a correctly formatted result instead of copying the bad
+value. Also drop empty leftover paragraphs/spacing blocks that add no
+content or visual value (common PDF-conversion artifacts) rather than
+reproducing them.
+
+Your role here is not to reproduce broken data verbatim — it is to
+output a correctly formatted, real, standard Word document that
+looks professional and court-ready for the legal domain. When the
+blueprint and good formatting judgment disagree on the ~5-10%, good
+formatting judgment wins.
 
 ==================================================================
 OVERFLOW & SIZE ADJUSTMENT RULES
