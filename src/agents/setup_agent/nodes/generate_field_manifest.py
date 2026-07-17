@@ -8,7 +8,7 @@ from src.core.config import settings
 from src.agents.setup_agent.schema.global_state import AgentState
 
 from src.agents.setup_agent.helpers.docx.docx_info_extractor import (
-    parse_blueprint,
+    extract_plain_text,
 )
 
 from src.agents.setup_agent.prompts.docx.field_manifest_prompt import (
@@ -38,11 +38,11 @@ def generate_field_manifest_node(state: AgentState) -> AgentState:
             logger.info("[generate_field_manifest] Unwrapping blueprint list -> using first element")
             blueprint = blueprint[0]
 
-        # Convert full blueprint into simplified LLM-friendly structure
-        parsed_blueprint = parse_blueprint(blueprint)
+        # Extract plain document text — all the LLM needs for field detection
+        document_text = extract_plain_text(blueprint)
 
         # Build field extraction prompt
-        prompt = generate_field_manifest(parsed_blueprint)
+        prompt = generate_field_manifest(document_text)
 
         # Call configured LLM
         llm = get_llm()

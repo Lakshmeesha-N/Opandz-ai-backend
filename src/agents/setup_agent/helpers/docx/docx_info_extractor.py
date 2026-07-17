@@ -1,6 +1,30 @@
 import json
 
 
+def extract_plain_text(blueprint: dict) -> str:
+    """
+    Extract a flat plain-text string from the document blueprint.
+    Concatenates only the text content of every block (header, body, footer).
+    Used for field manifest generation — formatting data is not needed.
+    """
+    lines = []
+    for section in blueprint.get("sections", []):
+        for area in ("header_blocks", "body_blocks", "footer_blocks"):
+            for block in section.get(area, []):
+                if block.get("block_type") == "table":
+                    # Flatten table cell text
+                    table_data = block.get("table_data") or {}
+                    for row in table_data.get("rows", []):
+                        cell_texts = [c for c in row.get("cells", []) if c]
+                        if cell_texts:
+                            lines.append(" | ".join(cell_texts))
+                else:
+                    text = block.get("content", "").strip()
+                    if text:
+                        lines.append(text)
+    return "\n".join(lines)
+
+
 def parse_blueprint(blueprint: dict) -> dict:
     result = {"title": blueprint.get("title", ""), "sections": []}
 
