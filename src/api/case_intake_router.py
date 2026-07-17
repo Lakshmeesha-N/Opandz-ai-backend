@@ -183,7 +183,7 @@ def _run_intake_inproc(job_id: str, payload: Dict[str, Any]):
 def get_status(job_id: str):
     """
     Poll job status.
-    - For RQ-backed jobs: reads status from Firestore (written by the worker).
+    - For RQ-backed jobs: reads status from Firestore, returning only lightweight fields for the frontend.
     - For in-process fallback jobs: reads from the in-memory JOBS dict.
     """
     # 1. Check Firestore first (RQ worker writes status here)
@@ -194,7 +194,29 @@ def get_status(job_id: str):
         if db:
             doc = db.collection("jobs").document(job_id).get()
             if doc.exists:
-                return doc.to_dict()
+                doc_data = doc.to_dict()
+                if doc_data:
+                    result_data = doc_data.get("result") or {}
+                    document_id = result_data.get("document_id") or doc_data.get("document_id")
+                    completion_percentage = doc_data.get("completion_percentage") or result_data.get("completion_percentage") or 0.0
+                    ready_to_generate = doc_data.get("ready_to_generate") or result_data.get("ready_to_generate") or False
+                    next_question = doc_data.get("next_question") or result_data.get("next_question")
+                    
+                    return {
+                        "job_id": job_id,
+                        "status": doc_data.get("status"),
+                        "error": doc_data.get("error"),
+                        "completion_percentage": completion_percentage,
+                        "ready_to_generate": ready_to_generate,
+                        "next_question": next_question,
+                        "document_id": document_id,
+                        "result": {
+                            "document_id": document_id,
+                            "completion_percentage": completion_percentage,
+                            "ready_to_generate": ready_to_generate,
+                            "next_question": next_question
+                        }
+                    }
     except Exception:
         logging.exception("Failed to read job status from Firestore for job %s", job_id)
 
@@ -221,6 +243,28 @@ def get_status(job_id: str):
 
     # 3. Fallback: in-memory store (inproc background task path)
     if job_id in JOBS:
-        return JOBS[job_id]
+        job_data = JOBS[job_id]
+        if job_data:
+            result_data = job_data.get("result") or {}
+            document_id = result_data.get("document_id") or job_data.get("document_id")
+            completion_percentage = job_data.get("completion_percentage") or result_data.get("completion_percentage") or 0.0
+            ready_to_generate = job_data.get("ready_to_generate") or result_data.get("ready_to_generate") or False
+            next_question = job_data.get("next_question") or result_data.get("next_question")
+            
+            return {
+                "job_id": job_id,
+                "status": job_data.get("status"),
+                "error": job_data.get("error"),
+                "completion_percentage": completion_percentage,
+                "ready_to_generate": ready_to_generate,
+                "next_question": next_question,
+                "document_id": document_id,
+                "result": {
+                    "document_id": document_id,
+                    "completion_percentage": completion_percentage,
+                    "ready_to_generate": ready_to_generate,
+                    "next_question": next_question
+                }
+            }
 
     raise HTTPException(status_code=404, detail="job not found")
