@@ -293,6 +293,22 @@ SPACING RULES
       Example:
         spacing: {{ before: 240, after: 120, line: 240, lineRule: "auto" }}
 
+21. line_spacing in the blueprint is an object, not a bare number:
+      {{ "value": 1.15, "unit": "multiplier", "rule": "MULTIPLE" }}
+      or
+      {{ "value": 360, "unit": "twips", "rule": "EXACTLY" }}
+    Convert it based on unit — never write line_spacing.value directly
+    into docx.js without this conversion:
+      - unit == "multiplier": line = round(value * 240), lineRule: "auto"
+      - unit == "twips": line = value, lineRule: "exact" (rule EXACTLY)
+        or lineRule: "atLeast" (rule AT_LEAST)
+    Example, multiplier 1.15:
+      spacing: {{ line: 276, lineRule: "auto" }}
+    Example, twips 360 with rule EXACTLY:
+      spacing: {{ line: 360, lineRule: "exact" }}
+    Getting this conversion wrong causes paragraphs to collapse and
+    visually overlap with the line below — treat this rule as strict.
+
 GENERAL RULES
 -------------
 21. Use DOCX.js constructs only — no DOM, no Node.js fs, no Buffer.

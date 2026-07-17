@@ -2,6 +2,7 @@
 
 from typing import Any, List
 from docx.text.paragraph import Paragraph
+from docx.text.run import Run as DocxRun
 from docx.table import Table, _Cell
 from docx.oxml.ns import qn
 
@@ -166,42 +167,136 @@ def _image_slots(paragraph: Paragraph) -> list[dict[str, Any]] | None:
     return slots or None
 
 
+def _hyperlink_url(paragraph: Paragraph, hyperlink_el) -> str | None:
+    """
+    Resolve a <w:hyperlink> element's r:id to its actual target URL
+    via the paragraph's part relationships. Returns None for internal
+    (anchor-only) hyperlinks with no r:id, or if the relationship is
+    missing (which happens with some malformed/converted DOCX files).
+    """
+    r_id = hyperlink_el.get(qn("r:id"))
+    if not r_id:
+        return None
+    try:
+        return paragraph.part.rels[r_id].target_ref
+    except (KeyError, AttributeError):
+        return None
+
+
 def extract_runs(paragraph: Paragraph) -> List[Run]:
+    """
+    Walk the paragraph's XML directly instead of using paragraph.runs.
+
+    paragraph.runs ONLY returns <w:r> elements that are direct children
+    of <w:p>. Any run wrapped in <w:hyperlink> (which is how every
+    clickable phone/email/link in a resume or letterhead is stored) is
+    silently skipped by python-docx, so its text, style, and formatting
+    never made it into the blueprint. This is why hyperlinked contact
+    details previously extracted as empty strings.
+
+    This version includes hyperlink-wrapped runs and also captures the
+    resolved target URL, so downstream generation can reproduce real
+    clickable links instead of just styled plain text.
+    """
     runs: List[Run] = []
 
-    for run in paragraph.runs:
-        runs.append(
-            {
-                "text": run.text,
-                "style_id": (
-                    run.style.style_id
-                    if run.style
-                    else None
-                ),
-                "style_name": (
-                    run.style.name
-                    if run.style
-                    else None
-                ),
-                "bold": run.bold,
-                "italic": run.italic,
-                "underline": run.underline,
-                "font_name": run.font.name,
-                "font_size": (
-                    run.font.size.pt
-                    if run.font.size
-                    else None
-                ),
-                "color": (
-                    str(run.font.color.rgb)
-                    if run.font.color
-                    and run.font.color.rgb
-                    else None
-                ),
-            }
-        )
+    for child in paragraph._p:
+        if child.tag == qn("w:r"):
+            run_elements = [(child, None)]
+        elif child.tag == qn("w:hyperlink"):
+            url = _hyperlink_url(paragraph, child)
+            run_elements = [
+                (r_el, url) for r_el in child.findall(qn("w:r"))
+            ]
+        else:
+            continue
+
+        for r_el, hyperlink_url in run_elements:
+            run = DocxRun(r_el, paragraph)
+            runs.append(
+                {
+                    "text": run.text,
+                    "style_id": (
+                        run.style.style_id
+                        if run.style
+                        else None
+                    ),
+                    "style_name": (
+                        run.style.name
+                        if run.style
+                        else None
+                    ),
+                    "bold": run.bold,
+                    "italic": run.italic,
+                    "underline": run.underline,
+                    "font_name": run.font.name,
+                    "font_size": (
+                        run.font.size.pt
+                        if run.font.size
+                        else None
+                    ),
+                    "color": (
+                        str(run.font.color.rgb)
+                        if run.font.color
+                        and run.font.color.rgb
+                        else None
+                    ),
+                    "hyperlink_url": hyperlink_url,
+                }
+            )
 
     return runs
+
+
+def _reconstruct_content(runs: List[Run]) -> str:
+    """
+    Build paragraph text from the extracted runs rather than
+    paragraph.text, since paragraph.text has the same hyperlink
+    blind spot as paragraph.runs.
+    """
+    return "".join(r["text"] or "" for r in runs)
+
+
+def _line_spacing_data(fmt) -> dict[str, Any] | None:
+    """
+    Store line spacing as an explicit {value, rule} pair instead of a
+    bare float, because python-docx returns two DIFFERENT kinds of
+    number under the same property depending on the paragraph's rule:
+
+      - rule == MULTIPLE (or unset): fmt.line_spacing is a plain
+        multiplier, e.g. 1.0 = single spacing, 1.15, 2.0, etc.
+      - rule == EXACTLY / AT_LEAST: fmt.line_spacing is a Length
+        object representing an absolute distance (has .twips).
+
+    Previously both cases were collapsed into one float field with no
+    unit, so a downstream generator (an LLM writing DOCX.js spacing:
+    { line: ... }) could not tell a 0.97 multiplier apart from a twips
+    value. That ambiguity is what caused paragraphs to collapse and
+    overlap in generated output.
+    """
+    value = fmt.line_spacing
+    rule = fmt.line_spacing_rule
+
+    if value is None:
+        return None
+
+    if isinstance(value, (int, float)):
+        return {
+            "value": float(value),
+            "unit": "multiplier",
+            "rule": str(rule) if rule is not None else "MULTIPLE",
+        }
+
+    # Length object (EXACTLY / AT_LEAST) — has .twips
+    twips = getattr(value, "twips", None)
+    if twips is None:
+        return None
+
+    return {
+        "value": twips,
+        "unit": "twips",
+        "rule": str(rule) if rule is not None else "EXACTLY",
+    }
 
 
 def extract_paragraph_style(
@@ -237,14 +332,7 @@ def extract_paragraph_style(
             if fmt.space_after
             else None
         ),
-        "line_spacing": (
-            float(fmt.line_spacing)
-            if isinstance(
-                fmt.line_spacing,
-                (int, float),
-            )
-            else None
-        ),
+        "line_spacing": _line_spacing_data(fmt),
         "left_indent": (
             fmt.left_indent.twips
             if fmt.left_indent
@@ -273,6 +361,7 @@ def extract_paragraph_block(
 ) -> DocumentBlock:
 
     image_slots = _image_slots(paragraph)
+    runs = extract_runs(paragraph)
 
     return {
         "block_id": block_id,
@@ -281,9 +370,9 @@ def extract_paragraph_block(
         if paragraph.style
         and paragraph.style.name.startswith("Heading")
         else "paragraph",
-        "content": paragraph.text,
+        "content": _reconstruct_content(runs),
 
-        "runs": extract_runs(paragraph),
+        "runs": runs,
         "paragraph_style": extract_paragraph_style(
             paragraph
         ),
@@ -363,6 +452,38 @@ def _cell_data(cell: _Cell) -> dict[str, Any]:
     }
 
 
+def _looks_like_layout_table(rows: list, borders: dict | None) -> bool:
+    """
+    Heuristic flag for tables that are really a single justified text
+    line (e.g. "Job Title ......... Location") misread as a table by
+    PDF-to-DOCX conversion, rather than genuine tabular data. This is
+    common with pdf2docx output specifically. It doesn't change how
+    the table is stored, only tags it so the generation step can treat
+    it as plain aligned text with tab stops instead of forcing it into
+    a rigid grid that risks overflow when values are replaced with
+    longer/shorter data.
+
+    Signals: exactly one row, 2-3 columns, and no real grid lines on
+    the sides/inside (a genuine data table almost always has full
+    borders or shading; a converted text line typically has at most a
+    single top rule, if anything).
+    """
+    if len(rows) != 1:
+        return False
+
+    cell_count = len(rows[0]["cells"])
+    if cell_count not in (2, 3):
+        return False
+
+    if not borders:
+        return True
+
+    has_grid_lines = any(
+        side in borders for side in ("insideH", "insideV", "left", "right", "bottom")
+    )
+    return not has_grid_lines
+
+
 def extract_table_block(
     table: Table,
     block_id: str,
@@ -389,6 +510,7 @@ def extract_table_block(
         )
 
     tbl_pr = _child(table._tbl, "w:tblPr")
+    borders = _border_data(_child(tbl_pr, "w:tblBorders"))
 
     return {
         "block_id": block_id,
@@ -405,8 +527,9 @@ def extract_table_block(
             "rows": rows,
             "structured_rows": structured_rows,
             "column_widths": _grid_column_widths(table),
-            "borders": _border_data(_child(tbl_pr, "w:tblBorders")),
+            "borders": borders,
             "shading": _shading_data(tbl_pr),
+            "is_likely_layout_table": _looks_like_layout_table(rows, borders),
         },
 
         "image_data": None,
