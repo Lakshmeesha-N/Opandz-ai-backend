@@ -103,6 +103,7 @@ SECTION HANDLING RULES
 7. Respect margins.
 8. Respect section-specific formatting.
 9. Respect block ordering.
+10. Ensure all elements fit completely within the section page dimensions and margins; no element (especially tables) should ever overflow or go out of the document boundaries.
 
 ==================================================================
 BLUEPRINT RULES
@@ -165,6 +166,18 @@ CONTENT & VALUE RULES
 9. Future edits to any value happen by directly editing the literal
    text inside the specific function that contains it — never by
    reintroducing a parameter to that function.
+
+==================================================================
+OVERFLOW & SIZE ADJUSTMENT RULES
+==================================================================
+
+1. When injecting case data, the text length may vary and could be significantly longer than the original template text.
+2. If you expect that the injected case data values will cause a table cell, column, or paragraph to overflow or look cluttered, you must intelligently adjust layout sizes:
+   - Slightly reduce font sizes (e.g. from 12pt to 10pt or 11pt) to fit the text.
+   - Adjust table column widths to allocate more space for longer content.
+   - Decrease paragraph spacing (`before`, `after`) or line spacing to keep content within page boundaries.
+3. All elements (including tables, cells, paragraphs, and lists) must strictly fit inside the document margins and page dimensions. They must not overflow or extend outside the printable area of the document.
+4. Ensure the total width of all columns in any table does not exceed the printable page width (Page Width - Left Margin - Right Margin).
 
 ==================================================================
 DOCX.JS API RULES  (READ EVERY RULE — VIOLATIONS CAUSE RUNTIME ERRORS)
@@ -279,26 +292,28 @@ DOCUMENT / SECTION RULES
     objects — never nested arrays. Spread group function results if they
     return arrays: `...build_02_group()`.
 19. Section `properties` for page size/margins:
-      properties: {{
-        page: {{
-          margin: {{
-            top: convertInchesToTwip(1),
-            bottom: convertInchesToTwip(1),
-            left: convertInchesToTwip(1.25),
-            right: convertInchesToTwip(1.25),
-          }},
-          size: {{
-            width: convertInchesToTwip(8.5),
-            height: convertInchesToTwip(11),
+      The blueprint/config specifies the page width, height, and margins directly in Twips. Write these values directly in the generated JavaScript code as numbers. Do NOT wrap them in `convertInchesToTwip()` since they are already in Twips.
+      Example:
+        properties: {{
+          page: {{
+            margin: {{
+              top: 1440,
+              bottom: 1440,
+              left: 1800,
+              right: 1800,
+            }},
+            size: {{
+              width: 12240,
+              height: 15840,
+            }}
           }}
         }}
-      }}
 
 SPACING RULES
 -------------
-20. Paragraph spacing uses twips. Use convertInchesToTwip() or
-    multiply points by 20 (1pt = 20 twips):
-      spacing: {{ before: 240, after: 120, line: 276, lineRule: "auto" }}
+20. Paragraph spacing and indents use twips. The blueprint/config specifies spacing (before, after) and indents (left, right, etc.) directly in Twips. Write these values directly as numbers. Do NOT multiply them by 20 or wrap them in convertInchesToTwip since they are already in Twips.
+      Example:
+        spacing: {{ before: 240, after: 120, line: 240, lineRule: "auto" }}
 
 GENERAL RULES
 -------------

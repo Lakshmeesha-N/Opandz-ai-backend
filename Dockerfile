@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y \
     npm \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g @babel/parser
+RUN npm init -y && npm install @babel/parser @babel/traverse
 
 
 

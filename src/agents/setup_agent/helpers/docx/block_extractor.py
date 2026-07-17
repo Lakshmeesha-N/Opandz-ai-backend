@@ -228,12 +228,12 @@ def extract_paragraph_style(
             else None
         ),
         "space_before": (
-            fmt.space_before.pt
+            fmt.space_before.twips
             if fmt.space_before
             else None
         ),
         "space_after": (
-            fmt.space_after.pt
+            fmt.space_after.twips
             if fmt.space_after
             else None
         ),
@@ -246,17 +246,17 @@ def extract_paragraph_style(
             else None
         ),
         "left_indent": (
-            fmt.left_indent.pt
+            fmt.left_indent.twips
             if fmt.left_indent
             else None
         ),
         "right_indent": (
-            fmt.right_indent.pt
+            fmt.right_indent.twips
             if fmt.right_indent
             else None
         ),
         "first_line_indent": (
-            fmt.first_line_indent.pt
+            fmt.first_line_indent.twips
             if fmt.first_line_indent
             else None
         ),

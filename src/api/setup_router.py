@@ -1,3 +1,4 @@
+
 # src/api/setup_router.py
 
 import uuid
@@ -235,16 +236,18 @@ def get_status(
         from src.queues.redis_client import get_redis
         from rq.job import Job
         conn = get_redis()
-        if conn:
-            try:
-                job = Job.fetch(job_id, connection=conn)
-                return {
-                    "job_id": job.id,
-                    "status": job.get_status(),  # e.g., "queued", "started", "finished", "failed"
-                    "backend": "rq"
-                }
-            except Exception:
-                pass
+        try:
+            job = Job.fetch(job_id, connection=conn)
+            status = job.get_status()
+            if status == "finished":
+                status = "completed"
+            return {
+                "job_id": job.id,
+                "status": status,
+                "backend": "rq"
+            }
+        except Exception:
+            pass
     except Exception:
         logging.exception("Failed to read job status from Redis for job %s", job_id)
 

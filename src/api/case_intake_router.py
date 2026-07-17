@@ -206,9 +206,12 @@ def get_status(job_id: str):
         if conn:
             try:
                 job = Job.fetch(job_id, connection=conn)
+                status = job.get_status()
+                if status == "finished":
+                    status = "completed"
                 return {
                     "job_id": job.id,
-                    "status": job.get_status(),  # e.g., "queued", "started", "finished", "failed"
+                    "status": status,
                     "backend": "rq"
                 }
             except Exception:
