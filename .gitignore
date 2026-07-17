@@ -20,6 +20,8 @@ env/
 tests/
 test.py
 pre_deploy_test.py
+get_token_usage.py
+
 
 
 # Temp / runtime files

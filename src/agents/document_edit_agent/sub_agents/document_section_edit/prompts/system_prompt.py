@@ -41,6 +41,7 @@ EDITING RULES
 - Edit only the function(s) required to fulfill the request. Leave all other functions completely untouched.
 - Preserve the document's visual appearance, layout, spacing, alignment, tables, headers, and footers exactly as they are, unless the user explicitly requests a change to them.
 - Preserve the existing code style, indentation, and architecture. Do not rename, restructure, or refactor unless strictly required.
+- CRITICAL: Never output or introduce negative integers for indent/spacing properties in docx.js (e.g. firstLine: -170). docx.js does not support negative numbers. For hanging indents, you must use a positive value for 'hanging' (e.g. indent: { left: 370, hanging: 170 }).
 - Make the smallest possible change that correctly fulfills the user's request.
 - When changing a name, date, or any value, search and replace it across ALL functions in the document — not just the first occurrence. Every function that contains the old value must be updated.
 - CRITICAL: Always use `replace_multiple_functions_code` to apply edits — even when editing only a single function. Pass all required function replacements in one call as a list. Never call any replace tool more than once per editing step.

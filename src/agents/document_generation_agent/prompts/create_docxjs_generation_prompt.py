@@ -138,6 +138,7 @@ BLUEPRINT RELIABILITY & CORRECTION RULES
 2. Fix a formatting value ONLY if it does one of these:
    - table column widths add up to more than the page width
    - a margin/width/height is zero, negative, or bigger than the page
+   - any docx.js indent or spacing property has a negative value. docx.js DOES NOT support negative integers (e.g. firstLine: -170). For hanging indents, you MUST use the 'hanging' property with a positive integer instead (e.g. indent: { left: 370, hanging: 170 }).
    - font size or spacing on one block wildly clashes with its
      siblings (classic PDF-extraction glitch)
    - anything would visually overlap or run off the page
