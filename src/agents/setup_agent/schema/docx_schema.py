@@ -48,6 +48,25 @@ class Run(TypedDict):
     font_name: Optional[str]
     font_size: Optional[float]
     color: Optional[str]
+    # Resolved target URL when this run came from a <w:hyperlink> —
+    # normal nesting (hyperlink wraps run) or pdf2docx's reversed
+    # nesting (run wraps hyperlink). None for plain, non-linked runs.
+    hyperlink_url: Optional[str]
+
+
+# --------------------------
+# Line spacing
+# --------------------------
+
+class LineSpacing(TypedDict):
+    # Meaning of `value` depends on `unit`:
+    #   unit == "multiplier" -> value is a bare multiplier (1.0 = single)
+    #   unit == "twips"      -> value is an absolute twips length
+    # `rule` mirrors python-docx's WD_LINE_SPACING: MULTIPLE, SINGLE,
+    # ONE_POINT_FIVE, DOUBLE, EXACTLY, AT_LEAST.
+    value: float
+    unit: Literal["multiplier", "twips"]
+    rule: str
 
 
 # --------------------------
@@ -61,7 +80,7 @@ class ParagraphStyle(TypedDict):
 
     space_before: Optional[float]
     space_after: Optional[float]
-    line_spacing: Optional[float]
+    line_spacing: Optional[LineSpacing]
 
     left_indent: Optional[float]
     right_indent: Optional[float]
@@ -87,10 +106,15 @@ class DocumentBlock(TypedDict):
         "image"
     ]
 
-    # Content used by AI
-    #content: Optional[str]
-    #role: Optional[str]
-    #editable: bool
+    # Content used by AI. All three are always present on every block
+    # returned by block_extractor.py (paragraph blocks set content and
+    # leave role/editable as None/False; table and image blocks set
+    # role/editable and leave content as None) — kept un-commented so
+    # nothing downstream that filters strictly by this schema silently
+    # drops them.
+    content: Optional[str]
+    role: Optional[str]
+    editable: bool
 
     # Text formatting
     runs: Optional[List[Run]]

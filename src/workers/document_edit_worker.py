@@ -111,6 +111,7 @@ async def _run_graph_async(job_id: str, payload: Dict[str, Any]):
     generated_code = ""
     status = "completed"
     error_msg = None
+    agent_output = ""
     
     document_id = payload.get("document_id", "")
     
