@@ -71,9 +71,10 @@ def save_field_manifest(
     firebase.ensure_globals()
     db = firebase.db
 
-    db.collection("templates").document(template_id).update(
+    db.collection("templates").document(template_id).set(
         {
             "field_manifest": field_manifest,
-        }
+        },
+        merge=True,
     )
 
