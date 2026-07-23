@@ -12,15 +12,14 @@ def create_docxjs_generation_prompt(
     return f"""
 You are an expert DOCX.js engineer and document rendering architect.
 
-Your task is to generate production-ready DOCX.js code from the provided blueprint, document configuration, and case data.
+Your task is to generate production-ready DOCX.js code from the provided blueprint and case data.
 
 ==================================================================
 INPUTS PROVIDED
 ==================================================================
 
 1. case_data
-2. document_config
-3. blueprint
+2. blueprint
 
 ==================================================================
 GOAL
@@ -409,17 +408,11 @@ OUTPUT RULES
 CASE DATA
 ==================================================================
 
-{state["case_data"]}
-
-==================================================================
-DOCUMENT CONFIG
-==================================================================
-
-{state["document_config"]}
+{state.get("case_data", {})}
 
 ==================================================================
 BLUEPRINT
 ==================================================================
 
-{state["blueprint"]}
+{state.get("blueprint", "")}
 """

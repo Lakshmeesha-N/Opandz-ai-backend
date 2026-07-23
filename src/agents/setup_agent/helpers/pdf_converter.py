@@ -1,7 +1,6 @@
 # src/agents/setup_agent/helpers/pdf_converter.py
 import os
 import logging
-from pdf2docx import Converter
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +10,7 @@ def convert_pdf_to_docx(pdf_path: str, docx_path: str) -> bool:
     Returns True if successful, False otherwise.
     """
     try:
+        from pdf2docx import Converter
         cv = Converter(pdf_path)
         cv.convert(docx_path)      # all pages by default
         cv.close()
@@ -19,3 +19,4 @@ def convert_pdf_to_docx(pdf_path: str, docx_path: str) -> bool:
     except Exception as e:
         logger.exception(f"[pdf_converter] Failed to convert {pdf_path} to DOCX: {e}")
         return False
+

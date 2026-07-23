@@ -79,8 +79,7 @@ class DocumentOrchestrator:
             "case_data": intake_result[
                 "case_data"
             ],
-            "document_config": {},
-            "blueprint": {},
+            "blueprint": "",
             "output_docx_path": None,
             "output_pdf_path": None,
             "generated_docxjs_code": "",

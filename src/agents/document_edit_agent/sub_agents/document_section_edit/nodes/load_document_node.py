@@ -68,20 +68,15 @@ async def load_document_node(
         if user_content.strip():
             messages.append(HumanMessage(content=user_content))
             
-        document_config = document["document_config"]
+        blueprint = document.get("blueprint", "")
         if not messages or getattr(messages[0], "type", "") != "system":
-            messages.insert(0, get_system_prompt(document_config))
+            messages.insert(0, get_system_prompt(blueprint))
 
         return {
             **state,
             "messages": messages,
             "temp_file_path": temp_file.name,
-            "document_config": document[
-                "document_config"
-            ],
-            "blueprint": document[
-                "blueprint"
-            ],
+            "blueprint": blueprint,
             "template_id": document.get("template_id", state.get("template_id")),
             "error": None,
         }

@@ -12,8 +12,7 @@ class AgentState(TypedDict):
 
     temp_file_path: str
 
-    document_config: dict[str, Any]
-    blueprint: dict[str, Any]
+    blueprint: Optional[str]
     messages: Annotated[list[Any], add_messages]
     uploaded_files: Optional[list[str]]
     error: Optional[str]

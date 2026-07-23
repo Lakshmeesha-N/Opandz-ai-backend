@@ -7,8 +7,7 @@ class DocumentEditState(TypedDict):
     document_id: str
     user_message: str
     temp_file_path: Optional[str]
-    document_config: Optional[dict[str, Any]]
-    blueprint: Optional[dict[str, Any]]
+    blueprint: Optional[str]
     messages: Annotated[list[Any], add_messages]
     uploaded_files: Optional[list[str]]
     error: Optional[str]

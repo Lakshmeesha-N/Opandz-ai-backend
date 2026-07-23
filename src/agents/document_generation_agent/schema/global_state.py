@@ -11,8 +11,7 @@ class AgentState(TypedDict):
 
     case_data: dict[str, Any]
 
-    document_config: dict[str, Any]
-    blueprint: dict[str, Any]
+    blueprint: Optional[str]
 
     output_docx_path: Optional[str]
     output_pdf_path: Optional[str]

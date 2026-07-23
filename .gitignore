@@ -30,6 +30,8 @@ logs/
 info/
 templates/
 test/
+docs+unzip/
+setup_agent_graph.png
 # Local Firestore emulator
 .local_firestore/
 

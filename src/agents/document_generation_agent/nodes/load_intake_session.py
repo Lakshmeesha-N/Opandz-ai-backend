@@ -39,26 +39,25 @@ async def load_generation_context(
             template_task,
         )
 
+        source = template_data.get("document_blueprint_source", "docx")
+        blueprint_content = template_data.get("blueprint_markdown", template_data.get("blueprint", ""))
+
+        if source == "gcs" and template_data.get("blueprint_url"):
+            try:
+                from src.agents.document_generation_agent.helpers.storage_fallback import read_code_from_storage
+                blueprint_content = read_code_from_storage(template_data["blueprint_url"])
+            except Exception as ex:
+                import logging
+                logging.getLogger(__name__).warning("Failed to fetch blueprint from GCS URL: %s", ex)
+
         return {
             **state,
             "case_data": intake_data.get(
                 "case_data",
                 {},
             ),
-            "blueprint": template_data.get(
-                "blueprint",
-                {},
-            ),
-            "document_config": template_data.get(
-                "document_config",
-                {},
-            ),
-            "document_blueprint_source": (
-                template_data.get(
-                    "document_blueprint_source",
-                    "docx",
-                )
-            ),
+            "blueprint": blueprint_content,
+            "document_blueprint_source": source,
             "error": None,
             "validation_retries": 0,
         }

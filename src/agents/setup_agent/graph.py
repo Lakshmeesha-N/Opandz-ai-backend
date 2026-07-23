@@ -28,6 +28,10 @@ from src.agents.setup_agent.nodes.generate_full_blueprint_body import (
     generate_full_blueprint_body,
 )
 
+from src.agents.setup_agent.nodes.generate_field_manifest import (
+    generate_field_manifest_node,
+)
+
 from src.agents.setup_agent.nodes.merge_and_upload import (
     merge_and_upload,
 )
@@ -108,6 +112,11 @@ graph.add_node(
 )
 
 graph.add_node(
+    "generate_field_manifest",
+    generate_field_manifest_node,
+)
+
+graph.add_node(
     "merge_and_upload",
     merge_and_upload,
 )
@@ -144,9 +153,19 @@ graph.add_edge(
     "extract_docx_blueprint",
 )
 
-# extract_docx_blueprint → check error → unzip_docx or clean_temp
+# extract_docx_blueprint → check error → generate_field_manifest or clean_temp
 graph.add_conditional_edges(
     "extract_docx_blueprint",
+    route_after_node,
+    {
+        "continue": "generate_field_manifest",
+        "error": "clean_temp",
+    },
+)
+
+# generate_field_manifest → check error → unzip_docx or clean_temp
+graph.add_conditional_edges(
+    "generate_field_manifest",
     route_after_node,
     {
         "continue": "unzip_docx",

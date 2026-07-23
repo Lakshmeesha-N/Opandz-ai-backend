@@ -81,7 +81,9 @@ class _MockDocument:
             from datetime import datetime
             if isinstance(obj, datetime):
                 return obj.isoformat()
-            raise TypeError(f"Type {type(obj)} not serializable")
+            if hasattr(obj, "__class__") and "Sentinel" in getattr(obj, "__class__", {}).__name__:
+                return datetime.now().isoformat()
+            return str(obj)
             
         with open(self.path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False, default=custom_serializer)
@@ -105,6 +107,13 @@ class _MockCollection:
     def document(self, doc_id: str):
         path = self.base_dir / self.name / f"{doc_id}.json"
         return _MockDocument(path)
+
+    def add(self, data: dict):
+        import uuid
+        doc_id = str(uuid.uuid4())
+        doc = self.document(doc_id)
+        doc.set(data)
+        return None, doc
 
 
 class _MockDB:

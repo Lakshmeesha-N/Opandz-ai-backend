@@ -60,22 +60,6 @@ def save_template(
     db.collection("templates").document(template_id).set(document_data)
 
 
-def save_document_config(
-    template_id: str,
-    document_config: Any,
-) -> None:
-    """Save document config to template synchronously."""
-    from src.core import firebase  # lazy import
-
-    firebase.ensure_globals()
-    db = firebase.db
-
-    db.collection("templates").document(template_id).update(
-        {
-            "document_config": document_config,
-        }
-    )
-
 
 def save_field_manifest(
     template_id: str,

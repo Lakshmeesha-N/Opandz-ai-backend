@@ -19,10 +19,10 @@ from src.utils.token_context import set_token_context, TokenTracker
 def main():
     # Initial state mimicking test.py
     initial_state = {
-        "file_path": os.path.join(project_root, "test", r"C:\Users\laksh\Downloads\1CG22AD009_ Report-1-20.pdf"),
-        "file_type": "pdf",
+        "file_path": os.path.join(project_root, "test", "WhatsApp_Pay_Case_Study_Polished.docx"),
+        "file_type": "docx",
         "lawyer_id": "test_lawyer",
-        "template_id": "report test",
+        "template_id": "whatsapp_pay_case_study",
         "error": None,
     }
 
@@ -55,3 +55,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

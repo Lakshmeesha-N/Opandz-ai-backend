@@ -27,11 +27,9 @@ async def load_document(
         template_id,
     )
 
-    document_config = build_llm_document_context(
-        template_data.get(
-            "document_config",
-            {},
-        ),
+    blueprint = template_data.get(
+        "blueprint_markdown",
+        template_data.get("blueprint", ""),
     )
 
     return {
@@ -39,11 +37,7 @@ async def load_document(
             "generated_docxjs_code",
             "",
         ),
-        "document_config": document_config,
-        "blueprint": template_data.get(
-            "blueprint",
-            {},
-        ),
+        "blueprint": blueprint,
         "template_id": template_id,
     }
 

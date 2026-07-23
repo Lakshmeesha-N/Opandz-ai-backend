@@ -4,7 +4,7 @@ from langchain_core.messages import SystemMessage
 
 
 def get_system_prompt(
-    document_config: dict,
+    blueprint: str,
 ) -> SystemMessage:
 
     return SystemMessage(
@@ -12,8 +12,8 @@ def get_system_prompt(
 
 The document is rendered from modular JavaScript functions. Every piece of text, every name, every date, and every clause in the rendered document exists as a string literal or piece of logic inside one of these functions. When a user asks to change something in the document, you do so by locating and editing the relevant function code.
 
-Document Configuration:
-{document_config}
+Document Blueprint & Layout Specification:
+{blueprint}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IDENTITY & CORE DIRECTIVE
