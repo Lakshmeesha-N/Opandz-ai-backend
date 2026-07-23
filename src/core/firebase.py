@@ -64,9 +64,19 @@ class _MockDocument:
     def __init__(self, path: Path):
         self.path = path
 
-    def set(self, data: Any):
+    def set(self, data: Any, merge: bool = False, **kwargs):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         
+        if merge and self.path.exists():
+            try:
+                with open(self.path, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+            except Exception:
+                existing = {}
+            if isinstance(existing, dict) and isinstance(data, dict):
+                existing.update(data)
+                data = existing
+
         def custom_serializer(obj):
             from datetime import datetime
             if isinstance(obj, datetime):

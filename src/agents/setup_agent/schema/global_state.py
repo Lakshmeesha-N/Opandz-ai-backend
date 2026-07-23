@@ -8,4 +8,5 @@ class AgentState(TypedDict):
     pdf_blueprint: Optional[List[DocumentBlueprint]]
     lawyer_id: str
     template_id: str
-    error: Optional[str]
+    temp_dir: Optional[str]  # path to temp directory for unzipped docx files
+    error: Optional[str]

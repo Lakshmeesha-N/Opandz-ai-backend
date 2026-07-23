@@ -127,18 +127,30 @@ class SharedLLM:
         """
         Read token counts from a LangChain response and log them to Firestore
         in a fire-and-forget background thread so the agent is never blocked.
+        Also records usage into active TokenTracker context if present.
         """
         try:
-            from src.utils.token_context import active_user_id, active_agent_name
-            from src.utils.token_logger import extract_tokens_from_response, log_agent_tokens
+            from src.utils.token_context import (
+                active_user_id,
+                active_agent_name,
+                active_token_tracker,
+            )
+            from src.utils.token_logger import (
+                extract_tokens_from_response,
+                log_agent_tokens,
+            )
+
+            prompt_tokens, completion_tokens = extract_tokens_from_response(res)
+            agent_name = active_agent_name.get("unknown")
+
+            tracker = active_token_tracker.get(None)
+            if tracker is not None:
+                tracker.add_usage(prompt_tokens, completion_tokens, agent_name)
 
             uid = active_user_id.get(None)
             if not uid:
                 # No user context set — skip logging (e.g. health checks)
                 return
-
-            agent_name = active_agent_name.get("unknown")
-            prompt_tokens, completion_tokens = extract_tokens_from_response(res)
 
             if prompt_tokens == 0 and completion_tokens == 0:
                 logger.debug(

@@ -1,6 +1,8 @@
 # block_extractor.py
 
-from typing import Any, List
+from __future__ import annotations
+
+from typing import Any, List, Optional
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run as DocxRun
 from docx.table import Table, _Cell
@@ -15,6 +17,9 @@ from src.agents.setup_agent.schema.docx_schema import (
 
 EMU_PER_POINT = 12700
 
+# ---------------------------------------------------------------------------
+# Low-level XML helpers
+# ---------------------------------------------------------------------------
 
 def _attr(element, name: str) -> str | None:
     if element is None:
@@ -52,6 +57,10 @@ def _emu_to_points(value: str | None) -> float | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Border / shading helpers
+# ---------------------------------------------------------------------------
+
 def _border_data(element) -> dict[str, Any] | None:
     if element is None:
         return None
@@ -81,39 +90,58 @@ def _shading_data(element) -> dict[str, str | None] | None:
     }
 
 
-def _numbering_data(paragraph: Paragraph) -> dict[str, str | None] | None:
+# ---------------------------------------------------------------------------
+# FIX 4 — Numbering data (uses NumberingResolver when available)
+# ---------------------------------------------------------------------------
+
+def _numbering_data(
+    paragraph: Paragraph,
+    numbering_resolver=None,
+) -> dict[str, Any] | None:
+    """
+    Extract numPr and, when a NumberingResolver is supplied, cross-reference
+    numbering.xml to get the real numFmt / lvlText so list_type is correct.
+    """
     p_pr = _child(paragraph._p, "w:pPr")
     num_pr = _child(p_pr, "w:numPr")
-    style_name = paragraph.style.name.lower() if paragraph.style and paragraph.style.name else ""
-
-    list_type = None
-    if "bullet" in style_name:
-        list_type = "bullet"
-    elif "number" in style_name or "list" in style_name:
-        list_type = "numbered"
 
     if num_pr is None:
-        if list_type is None:
-            return None
-        return {
-            "num_id": None,
-            "level": None,
-            "list_type": list_type,
-        }
+        return None
 
     num_id_el = _child(num_pr, "w:numId")
     level_el = _child(num_pr, "w:ilvl")
     num_id = _attr(num_id_el, "w:val")
     level = _attr(level_el, "w:val")
-    if list_type is None and num_id is not None:
-        list_type = "numbered"
 
-    return {
+    # FIX 3 — use resolver, not style-name string heuristic
+    if numbering_resolver is not None:
+        list_type = numbering_resolver.list_type(num_id, level)
+        resolved = numbering_resolver.resolve(num_id, level)
+    else:
+        list_type = "numbered"  # safe fallback (numPr exists)
+        resolved = None
+
+    result: dict[str, Any] = {
         "num_id": num_id,
         "level": level,
         "list_type": list_type,
     }
 
+    # FIX 4 — attach resolved lvlText / numFmt when available
+    if resolved:
+        if resolved.get("num_fmt") is not None:
+            result["num_fmt"] = resolved["num_fmt"]
+        if resolved.get("lvl_text") is not None:
+            result["lvl_text"] = resolved["lvl_text"]
+        if resolved.get("start") is not None:
+            result["start"] = resolved["start"]
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Tab stops
+# ---------------------------------------------------------------------------
 
 def _tab_stops(paragraph: Paragraph) -> list[dict[str, Any]] | None:
     p_pr = _child(paragraph._p, "w:pPr")
@@ -129,6 +157,10 @@ def _tab_stops(paragraph: Paragraph) -> list[dict[str, Any]] | None:
         )
     return tabs or None
 
+
+# ---------------------------------------------------------------------------
+# Image slots
+# ---------------------------------------------------------------------------
 
 def _image_slots(paragraph: Paragraph) -> list[dict[str, Any]] | None:
     slots = []
@@ -168,229 +200,428 @@ def _image_slots(paragraph: Paragraph) -> list[dict[str, Any]] | None:
     return slots or None
 
 
+# ---------------------------------------------------------------------------
+# Hyperlink URL resolver
+# ---------------------------------------------------------------------------
+
 def _hyperlink_url(paragraph: Paragraph, hyperlink_el) -> str | None:
-    """
-    Resolve a <w:hyperlink> element's r:id to its actual target URL
-    via the paragraph's part relationships. Returns None for internal
-    (anchor-only) hyperlinks with no r:id, or if the relationship is
-    missing (which happens with some malformed/converted DOCX files).
-    """
+    """Resolve hyperlink relationship to target URL."""
     r_id = hyperlink_el.get(qn("r:id"))
     if not r_id:
         return None
     try:
-        return paragraph.part.rels[r_id].target_ref
+        if hasattr(paragraph.part, "rels") and r_id in paragraph.part.rels:
+            return paragraph.part.rels[r_id].target_ref
+        return None
     except (KeyError, AttributeError):
         return None
 
 
-def extract_runs(paragraph: Paragraph) -> List[Run]:
+# ---------------------------------------------------------------------------
+# FIX 1 — Run extraction: recurse into w:ins / w:del / w:sdt
+# ---------------------------------------------------------------------------
+
+# Tags that wrap runs without contributing text themselves
+_TRANSPARENT_WRAPPERS = frozenset([
+    qn("w:ins"),          # tracked insertion
+    qn("w:del"),          # tracked deletion (w:delText carries the text)
+    qn("w:moveFrom"),     # tracked move-source
+    qn("w:moveTo"),       # tracked move-destination
+    qn("w:sdtContent"),   # content-control inner content
+])
+
+
+def _iter_run_elements(element, paragraph: Paragraph):
     """
-    Walk the paragraph's XML directly instead of using paragraph.runs.
+    Recursively yield (r_element, hyperlink_url_or_None) for every w:r
+    contained within *element*, descending transparently into:
+      - w:ins, w:del, w:moveFrom, w:moveTo  (tracked changes)
+      - w:sdt / w:sdtContent                (content controls)
+      - w:hyperlink                          (hyperlinks at any depth)
+    """
+    for child in element:
+        tag = child.tag
 
-    paragraph.runs ONLY returns <w:r> elements that are direct children
-    of <w:p>. Any run wrapped in <w:hyperlink> (which is how every
-    clickable phone/email/link in a resume or letterhead is stored in
-    a normally-authored DOCX) is silently skipped by python-docx, so
-    its text, style, and formatting never made it into the blueprint.
+        if tag == qn("w:r"):
+            yield child, None
 
-    Some converters — pdf2docx in particular — additionally write
-    INVALID, reversed nesting: a <w:r> that itself contains a nested
-    <w:hyperlink>, instead of the other way around. Both directions
-    are handled below so hyperlink text is never silently dropped
-    regardless of which tool produced the source DOCX.
+        elif tag == qn("w:hyperlink"):
+            url = _hyperlink_url(paragraph, child)
+            # Recurse into hyperlink to catch its w:r children (and nested wrappers)
+            for r_el, _ in _iter_run_elements(child, paragraph):
+                yield r_el, url
+
+        elif tag == qn("w:sdt"):
+            # w:sdt → w:sdtContent → runs
+            sdt_content = child.find(qn("w:sdtContent"))
+            if sdt_content is not None:
+                yield from _iter_run_elements(sdt_content, paragraph)
+
+        elif tag in _TRANSPARENT_WRAPPERS:
+            yield from _iter_run_elements(child, paragraph)
+
+
+def extract_runs(paragraph: Paragraph, theme_resolver=None) -> List[Run]:
+    """
+    Extract every run in the paragraph, including runs nested inside
+    tracked-change wrappers (w:ins, w:del) and content controls (w:sdt).
+
+    FIX 6: When a theme_resolver is available, resolve theme colors and
+    theme font names to their concrete values.
     """
     runs: List[Run] = []
 
-    def from_hyperlink(hyperlink_el):
-        url = _hyperlink_url(paragraph, hyperlink_el)
-        return [(r_el, url) for r_el in hyperlink_el.findall(qn("w:r"))]
-
-    for child in paragraph._p:
-        if child.tag == qn("w:r"):
-            # Reversed/invalid nesting check: some converters put a
-            # <w:hyperlink> INSIDE the run instead of around it.
-            nested_hyperlink = child.find(qn("w:hyperlink"))
-            if nested_hyperlink is not None:
-                run_sources = from_hyperlink(nested_hyperlink)
-            else:
-                run_sources = [(child, None)]
-        elif child.tag == qn("w:hyperlink"):
-            run_sources = from_hyperlink(child)
-        else:
-            continue
-
-        for r_el, hyperlink_url in run_sources:
+    for r_el, hyperlink_url in _iter_run_elements(paragraph._p, paragraph):
+        try:
             run = DocxRun(r_el, paragraph)
+            text = run.text or ""
+
+            # --- color resolution (FIX 6) ---
+            color: str | None = None
+            theme_color: str | None = None
+
+            try:
+                if run.font.color and run.font.color.rgb:
+                    color = str(run.font.color.rgb)
+                elif theme_resolver is not None and run.font.color:
+                    tc = run.font.color.theme_color  # may be None
+                    brightness = run.font.color.brightness  # may be None or 0.0
+                    if tc is not None:
+                        resolved_hex = theme_resolver.resolve_color(tc, brightness)
+                        if resolved_hex:
+                            color = resolved_hex
+                            theme_color = str(tc)
+            except Exception:
+                pass
+
+            # --- font name resolution (FIX 6) ---
+            font_name: str | None = None
+            theme_font: str | None = None
+
+            try:
+                font_name = run.font.name  # explicit name or None
+                if font_name is None and theme_resolver is not None:
+                    # Check w:rFonts asciiTheme / hAnsiTheme
+                    r_pr = _child(r_el, "w:rPr")
+                    r_fonts = _child(r_pr, "w:rFonts")
+                    if r_fonts is not None:
+                        for attr_name in ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme"):
+                            slot = _attr(r_fonts, attr_name)
+                            if slot:
+                                resolved_font = theme_resolver.resolve_font(slot)
+                                if resolved_font:
+                                    font_name = resolved_font
+                                    theme_font = slot
+                                break
+            except Exception:
+                pass
+
+            # --- font size ---
+            try:
+                font_size = run.font.size.pt if run.font.size else None
+            except Exception:
+                font_size = None
+
             runs.append(
                 {
-                    "text": run.text,
-                    "style_id": (
-                        run.style.style_id
-                        if run.style
-                        else None
-                    ),
-                    "style_name": (
-                        run.style.name
-                        if run.style
-                        else None
-                    ),
+                    "text": text,
+                    "style_id": run.style.style_id if run.style else None,
+                    "style_name": run.style.name if run.style else None,
                     "bold": run.bold,
                     "italic": run.italic,
                     "underline": run.underline,
-                    "font_name": run.font.name,
-                    "font_size": (
-                        run.font.size.pt
-                        if run.font.size
-                        else None
-                    ),
-                    "color": (
-                        str(run.font.color.rgb)
-                        if run.font.color
-                        and run.font.color.rgb
-                        else None
-                    ),
+                    "font_name": font_name,
+                    "font_size": font_size,
+                    "color": color,
+                    "theme_color": theme_color,
+                    "theme_font": theme_font,
                     "hyperlink_url": hyperlink_url,
                 }
             )
+        except Exception:
+            continue
 
     return runs
 
 
-def _reconstruct_content(runs: List[Run]) -> str:
-    """
-    Build paragraph text from the extracted runs rather than
-    paragraph.text, since paragraph.text has the same hyperlink
-    blind spot as paragraph.runs.
-    """
-    return "".join(r["text"] or "" for r in runs)
+# ---------------------------------------------------------------------------
+# Reconstruct paragraph text from runs
+# ---------------------------------------------------------------------------
 
+def _reconstruct_content(runs: List[Run]) -> str:
+    if not runs:
+        return ""
+    return "".join(str(r.get("text", "")) or "" for r in runs if r is not None)
+
+
+# ---------------------------------------------------------------------------
+# FIX 2 — Line spacing: rule-driven, read directly from XML
+# ---------------------------------------------------------------------------
 
 def _line_spacing_data(fmt) -> dict[str, Any] | None:
     """
-    Store line spacing as an explicit {value, unit, rule} triple.
+    Read line spacing directly from the paragraph XML (<w:spacing> element)
+    so we never depend on python-docx's type coercion.
 
-    IMPORTANT: branch on fmt.line_spacing_rule, NOT on the Python type
-    of fmt.line_spacing. python-docx's Length objects (returned when
-    rule is EXACTLY or AT_LEAST) are a subclass of int, so a naive
-    `isinstance(value, (int, float))` check matches them too and
-    wrongly treats them as a bare multiplier — skipping the EMU-to-
-    twips conversion and leaking a huge raw internal number (e.g.
-    139700) downstream. That number then gets used as a line height
-    directly, which is what was blowing up spacing and creating blank
-    pages. Checking the rule first avoids this entirely.
+    w:lineRule values:
+      "auto"    → multiplier (value is 240 = single, 360 = 1.5x, etc.)
+      "exact"   → twips (WD_LINE_SPACING.EXACTLY)
+      "atLeast" → twips (WD_LINE_SPACING.AT_LEAST)
+      absent    → treat as "auto"
+
+    We keep fmt as a parameter so callers can pass paragraph_format;
+    but we reach into the underlying XML for the raw values.
     """
-    value = fmt.line_spacing
-    rule = fmt.line_spacing_rule
-
-    if value is None:
+    if fmt is None:
         return None
 
-    if rule in (WD_LINE_SPACING.EXACTLY, WD_LINE_SPACING.AT_LEAST):
-        twips = getattr(value, "twips", None)
-        if twips is None:
-            return None
+    # Access the underlying pPr/spacing element from python-docx's format object
+    # paragraph_format._pPr is the <w:pPr> element; may be None for default-only paras
+    try:
+        p_pr = fmt._pPr  # type: ignore[attr-defined]
+    except AttributeError:
+        return None
+
+    if p_pr is None:
+        return None
+
+    spacing_el = p_pr.find(qn("w:spacing"))
+    if spacing_el is None:
+        return None
+
+    line_val = spacing_el.get(qn("w:line"))
+    line_rule = spacing_el.get(qn("w:lineRule"))  # "auto" | "exact" | "atLeast" | None
+
+    if line_val is None:
+        return None
+
+    try:
+        raw = int(line_val)
+    except (TypeError, ValueError):
+        return None
+
+    # FIX 2 — determine unit purely from lineRule, not from magnitude
+    if line_rule in ("exact", "atLeast"):
         return {
-            "value": twips,
+            "value": raw,                           # twips
             "unit": "twips",
-            "rule": "EXACTLY" if rule == WD_LINE_SPACING.EXACTLY else "AT_LEAST",
+            "rule": "EXACTLY" if line_rule == "exact" else "AT_LEAST",
+        }
+    else:
+        # "auto" or absent → value is in 240ths of a line (single = 240)
+        return {
+            "value": raw / 240.0,                   # normalise to multiplier
+            "unit": "multiplier",
+            "rule": "MULTIPLE",
         }
 
-    # MULTIPLE, SINGLE, ONE_POINT_FIVE, DOUBLE, or unset (defaults to
-    # MULTIPLE): value is a plain multiplier here.
-    return {
-        "value": float(value),
-        "unit": "multiplier",
-        "rule": str(rule) if rule is not None else "MULTIPLE",
+
+# ---------------------------------------------------------------------------
+# FIX 5 — Style inheritance: walk basedOn chain for effective values
+# ---------------------------------------------------------------------------
+
+def _walk_style_chain(style):
+    """Yield style and every ancestor via basedOn, stopping at cycles."""
+    seen = set()
+    current = style
+    while current is not None:
+        style_id = getattr(current, "style_id", None)
+        if style_id in seen:
+            break
+        seen.add(style_id)
+        yield current
+        current = getattr(current, "base_style", None)
+
+
+def _effective_paragraph_fmt_xml(paragraph: Paragraph):
+    """
+    Walk the paragraph's style chain and collect the first non-None value for
+    each spacing/indent attribute from the XML <w:pPr> of each style.
+
+    Returns a dict of raw XML values: space_before, space_after, left_indent,
+    right_indent, first_line_indent (all in twips as str), alignment (str).
+    """
+    # Attributes: (result_key, spacing_xml_attr, spacing_element)
+    SPACING_ATTRS = [
+        ("space_before", "w:before", "spacing"),
+        ("space_after",  "w:after",  "spacing"),
+    ]
+    INDENT_ATTRS = [
+        ("left_indent",       "w:left",  "ind"),
+        ("right_indent",      "w:right", "ind"),
+        ("first_line_indent", "w:firstLine", "ind"),
+    ]
+
+    result: dict[str, str | None] = {
+        "space_before": None,
+        "space_after": None,
+        "left_indent": None,
+        "right_indent": None,
+        "first_line_indent": None,
+        "alignment": None,
+        "line_spacing_raw": None,  # ("value_str", "lineRule_str") tuple stored as list
     }
 
+    # Collect sources: paragraph-level pPr first, then style chain
+    def _ppr_sources():
+        # 1. paragraph's own pPr
+        p_el = paragraph._p
+        own_ppr = p_el.find(qn("w:pPr"))
+        if own_ppr is not None:
+            yield own_ppr
+        # 2. walk style chain
+        for style in _walk_style_chain(paragraph.style):
+            try:
+                style_el = style.element  # type: ignore[attr-defined]
+                ppr = style_el.find(qn("w:pPr"))
+                if ppr is not None:
+                    yield ppr
+            except AttributeError:
+                continue
+
+    for ppr in _ppr_sources():
+        # spacing element
+        spacing = ppr.find(qn("w:spacing"))
+        if spacing is not None:
+            if result["space_before"] is None:
+                result["space_before"] = spacing.get(qn("w:before"))
+            if result["space_after"] is None:
+                result["space_after"] = spacing.get(qn("w:after"))
+            if result["line_spacing_raw"] is None:
+                line_val = spacing.get(qn("w:line"))
+                line_rule = spacing.get(qn("w:lineRule"))
+                if line_val is not None:
+                    result["line_spacing_raw"] = [line_val, line_rule]
+
+        # indent element
+        ind = ppr.find(qn("w:ind"))
+        if ind is not None:
+            if result["left_indent"] is None:
+                result["left_indent"] = ind.get(qn("w:left"))
+            if result["right_indent"] is None:
+                result["right_indent"] = ind.get(qn("w:right"))
+            if result["first_line_indent"] is None:
+                result["first_line_indent"] = ind.get(qn("w:firstLine"))
+
+        # alignment (jc)
+        jc = ppr.find(qn("w:jc"))
+        if jc is not None and result["alignment"] is None:
+            result["alignment"] = jc.get(qn("w:val"))
+
+        # Early exit if all found
+        if all(v is not None for v in result.values()):
+            break
+
+    return result
+
+
+def _line_spacing_from_raw(raw_pair: list | None) -> dict[str, Any] | None:
+    """Convert the [line_val, line_rule] pair from _effective_paragraph_fmt_xml."""
+    if raw_pair is None:
+        return None
+    line_val, line_rule = raw_pair[0], raw_pair[1]
+    try:
+        raw = int(line_val)
+    except (TypeError, ValueError):
+        return None
+
+    if line_rule in ("exact", "atLeast"):
+        return {
+            "value": raw,
+            "unit": "twips",
+            "rule": "EXACTLY" if line_rule == "exact" else "AT_LEAST",
+        }
+    else:
+        return {
+            "value": raw / 240.0,
+            "unit": "multiplier",
+            "rule": "MULTIPLE",
+        }
+
+
+# ---------------------------------------------------------------------------
+# Paragraph style extractor (uses all fixes)
+# ---------------------------------------------------------------------------
 
 def extract_paragraph_style(
     paragraph: Paragraph,
+    numbering_resolver=None,
+    theme_resolver=None,
 ) -> ParagraphStyle:
-
-    fmt = paragraph.paragraph_format
     p_pr = _child(paragraph._p, "w:pPr")
 
+    # FIX 5: get effective values by walking the style inheritance chain
+    eff = _effective_paragraph_fmt_xml(paragraph)
+
+    def _twips(val: str | None) -> float | None:
+        return int(val) / 20 if val is not None and val.lstrip("-").isdigit() else None
+
+    # Alignment: prefer python-docx (handles enum nicely), fall back to XML
+    alignment: str | None
+    if paragraph.alignment is not None:
+        alignment = str(paragraph.alignment)
+    elif eff["alignment"] is not None:
+        alignment = eff["alignment"]
+    else:
+        alignment = None
+
     return {
-        "style_name": (
-            paragraph.style.name
-            if paragraph.style
-            else None
-        ),
-        "style_id": (
-            paragraph.style.style_id
-            if paragraph.style
-            else None
-        ),
-        "alignment": (
-            str(paragraph.alignment)
-            if paragraph.alignment is not None
-            else None
-        ),
-        "space_before": (
-            fmt.space_before.twips
-            if fmt.space_before
-            else None
-        ),
-        "space_after": (
-            fmt.space_after.twips
-            if fmt.space_after
-            else None
-        ),
-        "line_spacing": _line_spacing_data(fmt),
-        "left_indent": (
-            fmt.left_indent.twips
-            if fmt.left_indent
-            else None
-        ),
-        "right_indent": (
-            fmt.right_indent.twips
-            if fmt.right_indent
-            else None
-        ),
-        "first_line_indent": (
-            fmt.first_line_indent.twips
-            if fmt.first_line_indent
-            else None
-        ),
-        "numbering": _numbering_data(paragraph),
+        "style_name": paragraph.style.name if paragraph.style else None,
+        "style_id": paragraph.style.style_id if paragraph.style else None,
+        "alignment": alignment,
+        # FIX 5: inherited values from basedOn chain
+        "space_before": _twips(eff["space_before"]),
+        "space_after":  _twips(eff["space_after"]),
+        "line_spacing": _line_spacing_from_raw(eff["line_spacing_raw"]),  # FIX 2 + 5
+        "left_indent":       _twips(eff["left_indent"]),
+        "right_indent":      _twips(eff["right_indent"]),
+        "first_line_indent": _twips(eff["first_line_indent"]),
+        # FIX 3 + 4: numbering via resolver
+        "numbering": _numbering_data(paragraph, numbering_resolver),
         "tab_stops": _tab_stops(paragraph),
         "borders": _border_data(_child(p_pr, "w:pBdr")),
     }
 
 
+# ---------------------------------------------------------------------------
+# Paragraph block extractor
+# ---------------------------------------------------------------------------
+
 def extract_paragraph_block(
     paragraph: Paragraph,
     block_id: str,
     order: int,
+    numbering_resolver=None,
+    theme_resolver=None,
 ) -> DocumentBlock:
-
     image_slots = _image_slots(paragraph)
-    runs = extract_runs(paragraph)
+    # FIX 1 + 6: runs now include tracked-change text and theme color/font
+    runs = extract_runs(paragraph, theme_resolver=theme_resolver)
 
     return {
         "block_id": block_id,
         "order": order,
-        "block_type": "heading"
-        if paragraph.style
-        and paragraph.style.name.startswith("Heading")
-        else "paragraph",
+        "block_type": (
+            "heading"
+            if paragraph.style and paragraph.style.name.startswith("Heading")
+            else "paragraph"
+        ),
         "content": _reconstruct_content(runs),
-
         "runs": runs,
         "paragraph_style": extract_paragraph_style(
-            paragraph
+            paragraph,
+            numbering_resolver=numbering_resolver,
+            theme_resolver=theme_resolver,
         ),
-
         "table_data": None,
-        "image_data": {
-            "has_image": True,
-            "slots": image_slots,
-        } if image_slots else None,
+        "image_data": {"has_image": True, "slots": image_slots} if image_slots else None,
         "image_slots": image_slots,
     }
 
+
+# ---------------------------------------------------------------------------
+# Table helpers (unchanged)
+# ---------------------------------------------------------------------------
 
 def _grid_column_widths(table: Table) -> list[float | None] | None:
     tbl_grid = _child(table._tbl, "w:tblGrid")
@@ -459,21 +690,6 @@ def _cell_data(cell: _Cell) -> dict[str, Any]:
 
 
 def _looks_like_layout_table(rows: list, borders: dict | None) -> bool:
-    """
-    Heuristic flag for tables that are really a single justified text
-    line (e.g. "Job Title ......... Location") misread as a table by
-    PDF-to-DOCX conversion, rather than genuine tabular data. This is
-    common with pdf2docx output specifically. It doesn't change how
-    the table is stored, only tags it so the generation step can treat
-    it as plain aligned text with tab stops instead of forcing it into
-    a rigid grid that risks overflow when values are replaced with
-    longer/shorter data.
-
-    Signals: exactly one row, 2-3 columns, and no real grid lines on
-    the sides/inside (a genuine data table almost always has full
-    borders or shading; a converted text line typically has at most a
-    single top rule, if anything).
-    """
     if len(rows) != 1:
         return False
 
@@ -524,11 +740,8 @@ def extract_table_block(
         "block_type": "table",
         "content": None,
         "role": None,
-        "editable": False,
-
         "runs": None,
         "paragraph_style": None,
-
         "table_data": {
             "rows": rows,
             "structured_rows": structured_rows,
@@ -537,44 +750,6 @@ def extract_table_block(
             "shading": _shading_data(tbl_pr),
             "is_likely_layout_table": _looks_like_layout_table(rows, borders),
         },
-
         "image_data": None,
         "image_slots": None,
-    }
-
-
-def extract_image_block(
-    image_name: str,
-    relationship_id: str | None,
-    block_id: str,
-    order: int,
-) -> DocumentBlock:
-
-    return {
-        "block_id": block_id,
-        "order": order,
-        "block_type": "image",
-        "content": None,
-        "role": None,
-        "editable": False,
-
-        "runs": None,
-        "paragraph_style": None,
-
-        "table_data": None,
-
-        "image_data": {
-            "has_image": True,
-            "name": image_name,
-            "relationship_id": relationship_id,
-        },
-        "image_slots": [
-            {
-                "has_image": True,
-                "relationship_id": relationship_id,
-                "name": image_name,
-                "width": None,
-                "height": None,
-            }
-        ],
     }

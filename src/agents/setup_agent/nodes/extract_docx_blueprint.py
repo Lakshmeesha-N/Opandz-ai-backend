@@ -27,13 +27,6 @@ def extract_docx_blueprint(state: AgentState) -> AgentState:
         # Extract blueprint from DOCX
         blueprint = parse_docx(file_path)
 
-        # Always save to Firestore / local mock Firestore database
-        save_template(
-            template_id=template_id,
-            lawyer_id=state["lawyer_id"],
-            blueprint=blueprint,
-        )
-
         result = {
             "docx_blueprint": [blueprint],
             "error": None,

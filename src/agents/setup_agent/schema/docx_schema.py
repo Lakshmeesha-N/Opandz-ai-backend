@@ -18,6 +18,10 @@ class Numbering(TypedDict):
     num_id: Optional[str]
     level: Optional[str]
     list_type: Optional[str]
+    # Resolved from numbering.xml by NumberingResolver (Fix 4)
+    num_fmt: Optional[str]   # e.g. "bullet", "decimal", "lowerLetter"
+    lvl_text: Optional[str]  # e.g. "•", "%1.", "(%1)"
+    start: Optional[int]     # starting value for the level
 
 
 class TabStop(TypedDict):
@@ -52,6 +56,13 @@ class Run(TypedDict):
     # normal nesting (hyperlink wraps run) or pdf2docx's reversed
     # nesting (run wraps hyperlink). None for plain, non-linked runs.
     hyperlink_url: Optional[str]
+    # Resolved from theme XML by ThemeResolver (Fix 6)
+    # theme_color is the OOXML slot name (e.g. "accent1") when the
+    # concrete `color` was derived from the theme rather than an explicit RGB.
+    theme_color: Optional[str]
+    # theme_font is the w:asciiTheme / w:hAnsiTheme slot (e.g. "majorAscii")
+    # when font_name was derived from the theme rather than an explicit name.
+    theme_font: Optional[str]
 
 
 # --------------------------
