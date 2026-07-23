@@ -16,12 +16,14 @@ def create_followup_question_prompt(
         else ""
     )
 
+    valid_missing = [f for f in missing_fields if f]
+
     return f"""
 You are a friendly legal intake assistant.
 
 {user_context}The following information is still missing from the case:
 
-{chr(10).join(f"- {field}" for field in missing_fields)}
+{chr(10).join(f"- {field}" for field in valid_missing)}
 
 Rules:
 

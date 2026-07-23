@@ -31,13 +31,14 @@ async def load_field_manifest(
 
         case_data = {}
 
-        fields = field_manifest.get(
-            "required_fields",
-            field_manifest.get("fields", [])
+        fields = (
+            field_manifest.get("fields")
+            or field_manifest.get("field_manifest", {}).get("fields")
+            or field_manifest.get("required_fields", [])
         )
 
         for field in fields:
-            field_name = field.get("field") or field.get("name")
+            field_name = field.get("field_name") or field.get("field") or field.get("name")
 
             if field_name:
                 # Retain existing answers, defaulting to None only if empty

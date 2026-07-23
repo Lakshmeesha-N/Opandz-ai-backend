@@ -30,9 +30,10 @@ def calculate_completion(
             {},
         )
 
-        fields = field_manifest.get(
-            "required_fields",
-            field_manifest.get("fields", []),
+        fields = (
+            field_manifest.get("fields")
+            or field_manifest.get("field_manifest", {}).get("fields")
+            or field_manifest.get("required_fields", [])
         )
 
         total_fields = len(fields)
@@ -50,8 +51,9 @@ def calculate_completion(
         missing_fields = []
 
         for field in fields:
-
-            field_name = field.get("field") or field.get("name")
+            field_name = field.get("field_name") or field.get("field") or field.get("name")
+            if not field_name:
+                continue
 
             value = case_data.get(
                 field_name
