@@ -25,9 +25,10 @@ async def fix_docxjs_code(
         logger.info("[fix_docxjs_code] START: attempting to fix code after error: %s", validation_error)
 
         prompt = create_fix_docxjs_code_prompt(
-            generated_code=state[
-                "generated_docxjs_code"
-            ],
+            generated_code=state.get(
+                "generated_docxjs_code",
+                "",
+            ),
             validation_error=validation_error,
         )
 
@@ -55,7 +56,9 @@ async def fix_docxjs_code(
 
     except Exception as e:
         logger.exception("[fix_docxjs_code] ERROR: %s", str(e))
+        retries = state.get("validation_retries", 0) + 1
         return {
             **state,
+            "validation_retries": retries,
             "error": str(e),
         }

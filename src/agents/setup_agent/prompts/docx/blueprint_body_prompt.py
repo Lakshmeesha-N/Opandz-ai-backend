@@ -72,34 +72,70 @@ Do NOT shorten.
 
 Place all alignment, tab stops, fillable fields, page breaks, intentional spacer paragraphs, and other layout information exclusively in the Formatting Blueprint.
 
-The Formatting Blueprint should explicitly describe:
-- paragraph alignment (e.g. Left, Center, Right, Justified)
-- intentional blank spacer paragraphs
-- tab stops and shared tab stop positions
-- underlines (text-based vs drawn rule)
-- page/section breaks
-- numerical values whenever available (alignment, indents, tab stops, spacing, font size, bold/italic runs)
-- any layout that cannot be inferred from the text alone
+CRITICAL PRECISION RULES — You MUST follow every rule below. Vague phrases like "bold on some runs" are NOT acceptable.
 
-Preserve reconstruction-critical formatting without polluting the document text.
+### Per-Paragraph Rules:
+- State paragraph alignment EXACTLY: `alignment: center | left | right | justified`
+- State `space_before: Xpt` and `space_after: Xpt` from the JSON — never omit.
+- State `line_spacing: X (MULTIPLE | EXACTLY | AT_LEAST)` — use the exact value from JSON.
+- State `left_indent: Xpt`, `right_indent: Xpt`, `first_line_indent: Xpt` — state "none" if absent.
+- State tab stop positions EXACTLY including UNITS: `tab_stop: 216pt (left) | 360pt (center) | ...`
+- State `space_before: Xpt` and `space_after: Xpt` from the JSON — never omit.
+- Describe page breaks and section breaks explicitly.
 
-- For every run, state font_name and color explicitly if present in JSON — never omit.
-- For table cell borders with a color value, state it explicitly — never drop it.
+### Per-Run Formatting (MANDATORY for every paragraph):
+For EVERY paragraph, list each text run in this EXACT format:
 
-For ordinary body paragraphs sharing the same default layout and typography, describe the formatting ONCE for the entire group rather than repeating identical descriptions.
+  **Run 1:** `"<text>"` | bold=true/false | italic=true/false | underline=true/false | font=<name> | size=<Xpt> | color=#<RRGGBB>
+  **Run 2:** `"<text>"` | bold=true/false | italic=true/false | underline=true/false | font=<name> | size=<Xpt> | color=#<RRGGBB>
 
-Only generate detailed formatting when it differs within the section or is visually significant.
+Rules:
+- If ALL runs in a paragraph share the same formatting, you may write "All runs:" followed by a single entry.
+- NEVER write "bold on specific runs" — name the specific text of each bold/underlined run.
+- If `underline` is true in the JSON, write `underline=true` — never omit this.
+- If `bold` is true in the JSON, write `bold=true` — never omit this.
+- If color is #000000 (black), still write it explicitly.
 
-Do NOT guess values.
+### For intentional blank/spacer paragraphs:
+- Write: `[SPACER PARAGRAPH: space_before=Xpt, space_after=Xpt]`
+
+### For page/section breaks:
+- Write: `[PAGE BREAK]` or `[SECTION BREAK: type=<type>]` at exact position.
+
+### For borders on paragraphs:
+- State border style, size, and color explicitly if present.
 
 --------------------------------------------------------------------
 
 ## Tables
 
-Whenever tables exist:
-Render them as Markdown tables.
-Preserve row order, column order, merged cells, alignment, formatting, headers, and cell contents.
-Table column count must exactly match the number of columns in table_data — never merge or drop a column because its cells are empty for most/all rows. Render empty cells as blank markdown cells, not as an omitted column. A column with only one non-empty value (e.g. one row showing "14A." while the rest are blank) is still a real column and must appear in every row of that table's output.
+Whenever tables exist, output BOTH of the following subsections:
+
+### Table (Visual)
+Render as a Markdown table showing cell contents in correct row and column order.
+- Never merge or drop any column — blank cells render as empty: `|  |`
+- Never merge or drop any row.
+
+### Table (Formatting Spec)
+Immediately after each Markdown table, output a formatting spec block in this EXACT format:
+
+  **Table Formatting:**
+  - Total columns: N
+  - Column widths (in POINTS from JSON): Col1=Xpt | Col2=Xpt | Col3=Xpt | ...
+  - Table borders: top=<style/none> | bottom=<style/none> | left=<style/none> | right=<style/none> | insideH=<style/none> | insideV=<style/none>
+
+  For EACH ROW:
+  - Row height: Xpt (exact | atLeast | auto)
+  - Cell 1: width=Xpt | vAlign=top/center/bottom | borders=<specify if differ from table default> | colspan=N (if merged) | text runs: [list per-run formatting as above]
+  - Cell 2: width=Xpt | vAlign=top/center/bottom | ...
+  - ...
+
+  Rules:
+  - Column widths MUST be taken from `column_widths` in table_data JSON — state each column separately.
+  - Cell widths MUST be taken from `structured_rows.cells[i].width` in the JSON.
+  - `vAlign` MUST be taken from `structured_rows.cells[i].vertical_alignment` — if null, write `vAlign=default(top)`.
+  - Cell borders MUST be stated if they differ from the table-level borders.
+  - Multi-line cell content: list each paragraph inside the cell as a separate bullet.
 
 ====================================================================
 LOSSLESS RECONSTRUCTION RULES

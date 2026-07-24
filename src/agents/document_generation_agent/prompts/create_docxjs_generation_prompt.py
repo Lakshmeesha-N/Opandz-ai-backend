@@ -19,7 +19,49 @@ INPUTS PROVIDED
 ==================================================================
 
 1. case_data
-2. blueprint
+2. blueprint  (a Markdown reconstruction spec — NOT raw JSON. It is
+   organized into named semantic sections, each with prose layout
+   logic, a verbatim text/code-block mockup, and a bullet list of
+   exact formatting values. It does NOT contain block_id references.)
+
+==================================================================
+READING THE BLUEPRINT FORMAT
+==================================================================
+
+1. The blueprint is divided into "## Section Name" headings. Each
+   heading names a semantic unit (e.g. "Claimants List Block",
+   "Particulars Table 1", "Running Header", "Page Footer").
+2. A section named "Running Header" or similar describes content that
+   repeats at the top of every page/section — this maps to a DOCX.js
+   Header. A section named "Page Footer" or similar maps to a Footer.
+   Treat ONLY these explicitly-named repeating sections as
+   Header/Footer objects — every other section is body content.
+3. Any other section is BODY content — even if it mentions a report
+   title, chapter label, or similar; only build it as a Header/Footer
+   if the blueprint explicitly names it as a repeating header/footer
+   section.
+4. If a section's bullets reference "(repeating [element], same as
+   Section N)", resolve this by reusing the exact content and
+   formatting already defined in Section N when generating this
+   section's function — do not skip it, do not leave it blank. Every
+   section function must be fully self-contained and independently
+   correct, even though the blueprint deduplicated the description.
+5. Table sections render as literal Markdown tables in the blueprint
+   — every row and column must be reproduced, including blank cells,
+   exactly matching the blueprint's column count. Never merge or drop
+   a column because its cells are mostly empty.
+6. Code-block mockups (spatially arranged verbatim text) are the
+   authoritative source for exact text content and reading order —
+   reproduce every word from inside them, never paraphrase or drop
+   any line, including blank/spacer lines.
+7. Bullet lists under each section give exact numeric formatting
+   values (indent, spacing, alignment, tab-stops, line spacing, font,
+   color, bold/italic runs) — use these values directly, never
+   recompute or approximate them, except where OVERFLOW & SIZE
+   ADJUSTMENT RULES or BLUEPRINT RELIABILITY rules below apply.
+8. If a bullet states "not specified in source data" for a value, use
+   a sane DOCX.js default for that property rather than inventing a
+   specific number.
 
 ==================================================================
 GOAL
@@ -27,11 +69,24 @@ GOAL
 
 Generate a complete DOCX.js implementation that can recreate the entire document.
 
+==================================================================
+GENERIC MANDATE: 100% COMPLETE VERBATIM RECREATION FOR ALL DOCUMENTS
+==================================================================
+
+1. FULL CONTENT PRESERVATION: You MUST generate 100% of all content, text, tables, and sections present in the provided BLUEPRINT into DOCX.js code.
+2. ZERO OMISSION OF TABLE ROWS: In EVERY table present in the blueprint, EVERY single row (from the first row to the last row, including all intermediate numbered rows, data rows, and blank cells) MUST be explicitly created as a TableRow object in DOCX.js. Never skip, skip-count, or summarize table rows.
+3. ZERO OMISSION OF PARAGRAPHS & LISTS: Every single paragraph, narrative section, numbered/bullet list item, prayer section, legal clause, signature block, advocate line, and verification block in the blueprint MUST be rendered in complete verbatim detail.
+4. NO TRUNCATION / NO STUBS / NO ELLIPSES: Never output ellipses ("..."), TODO comments, summary stubs, or shortened text (such as "Wherefore, it is respectfully prayed..." or "That on an ill-fated day..."). Every paragraph, table cell, legal clause, signature block, and string from the blueprint and case_data MUST be written out in full verbatim text.
+5. NO DOCUMENT BIAS: These rules apply universally to EVERY template and document blueprint processed by this agent.
+
 The generated code must contain:
 
-1. One function for every header_group.
-2. One function for every semantic_group.
-3. One function for every footer_group.
+1. One function for every section explicitly identified as a
+   repeating header (e.g. "Running Header").
+2. One function for every other semantic section in the blueprint
+   (in the order they appear).
+3. One function for every section explicitly identified as a
+   repeating footer (e.g. "Page Footer").
 4. One final buildDocument() function that assembles the document.
 
 Every one of these functions is fully self-contained and takes zero
@@ -41,49 +96,39 @@ parameters. See FUNCTION SIGNATURE RULES below.
 FUNCTION NAMING RULES
 ==================================================================
 
-Header:
+CRITICAL: Derive function names directly from the blueprint's actual
+"## Section Name" headings — do not invent generic names and do not
+copy any example names shown in these instructions.
 
-section_header
-↓
+Header section (explicitly named repeating header):
+"Running Header" → build_section_header()
 
-build_section_header()
+Ordinary semantic section, in blueprint order, numbered sequentially:
+"Claimants List Block" (1st body section) → build_01_claimants_list_block()
+"Particulars Table 1" (2nd body section) → build_02_particulars_table_1()
 
-Semantic Group:
+Footer section (explicitly named repeating footer):
+"Page Footer" → build_section_footer()
 
-01_document_title_and_summary
-↓
-
-build_01_document_title_and_summary()
-
-02_ai_fundamentals
-↓
-
-build_02_ai_fundamentals()
-
-Footer:
-
-section_footer
-↓
-
-build_section_footer()
-
-Use the exact semantic group names when creating function names.
+Use snake_case derived from the actual heading text, prefixed with a
+zero-padded sequence number for ordinary body sections only (not for
+the header/footer functions).
 
 ==================================================================
 FUNCTION SIGNATURE RULES
 ==================================================================
 
 1. Every function — every header function, every footer function,
-   every semantic_group function, and buildDocument — is defined
+   every semantic-section function, and buildDocument — is defined
    with ZERO parameters. No exceptions.
 2. No function signature may include caseData, data, params, or any
    other parameter name, under any circumstance.
 3. All content a function needs is written directly inside that
-   function as fully resolved literal text. Nothing is passed in
-   from outside and nothing is read from an external variable.
+   function as fully resolved literal text, taken from the blueprint
+   and case_data. Nothing is passed in from outside and nothing is
+   read from an external variable.
 4. buildDocument() itself takes no parameters and calls every other
-   function with no arguments (e.g. build_03_suspension_details(),
-   not build_03_suspension_details(caseData)).
+   function with no arguments.
 5. If a function currently under construction would only make sense
    with a parameter, that is a signal the value it needs must
    instead be resolved now and hardcoded directly into that
@@ -93,86 +138,72 @@ FUNCTION SIGNATURE RULES
 SECTION HANDLING RULES
 ==================================================================
 
-1. document_config may contain multiple sections.
-2. Handle all sections.
-3. Respect section boundaries.
-4. Respect execution order.
-5. Respect section metadata.
-6. Respect page dimensions.
-7. Respect margins.
-8. Respect section-specific formatting.
-9. Respect block ordering.
-10. Ensure all elements fit completely within the section page dimensions and margins; no element (especially tables) should ever overflow or go out of the document boundaries.
+1. The blueprint may describe multiple document sections (distinct
+   page-setup groups, e.g. different margins/orientation) as well as
+   multiple semantic content sections within each. Handle all of them.
+2. Respect section boundaries exactly as delineated by blueprint
+   headings.
+3. Respect execution order — blueprint order is document order.
+4. Respect section metadata (page dimensions, margins, orientation)
+   as given in the blueprint's Page Setup / Recurring Layout
+   Constants information.
+5. Respect section-specific formatting differences (e.g. a section
+   with a different top margin).
+6. Respect content ordering within each section.
+7. Ensure all elements fit completely within the page dimensions and
+   margins; no element (especially tables) should ever overflow or
+   extend past document boundaries.
 
 ==================================================================
-BLUEPRINT RULES
+BLUEPRINT RULES (STRICT 100% COMPLETENESS REQUIRED)
 ==================================================================
 
-1. Preserve header blocks.
-2. Preserve body blocks.
-3. Preserve footer blocks.
-4. Preserve headings.
-5. Preserve paragraphs.
-6. Preserve tables.
-7. Preserve spacing.
-8. Preserve alignment.
-9. Preserve indentation.
-10. Preserve styles.
-11. Preserve run-level formatting.
-12. Preserve bold formatting.
-13. Preserve italic formatting.
-14. Preserve colors.
-15. Preserve font sizes.
-16. Preserve table structures.
-17. Preserve editable metadata.
-18. Preserve ordering.
+CRITICAL COMPLETENESS MANDATE:
+1. You MUST generate 100% of all content present in the BLUEPRINT into DOCX.js code.
+2. NEVER skip, truncate, summarize, abbreviate, or omit any table rows, paragraphs, bullet points, narrative sections, prayer requests, heads of claim, signature blocks, or verification blocks.
+3. IN TABLES: Every single row listed in the blueprint (e.g. Items 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 14(a), 15, 16, 17, 18, 19, 20, 21, 22) MUST be explicitly created as a TableRow in DOCX.js with complete text and formatting. Omitting intermediate rows or skipping numbers is FORBIDDEN.
+4. IN NARRATIVES & PRAYERS: Every paragraph (including long incident descriptions), all listed heads of compensation (Items 1 through 8), charge sheet descriptions, prayer demands, advocate signature blocks, claimant signature blocks, and verification text MUST be rendered in full verbatim detail.
+5. Preserve repeating header content.
+6. Preserve all body content verbatim.
+7. Preserve repeating footer content.
+8. Preserve headings.
+9. Preserve paragraphs, including empty spacer paragraphs where the blueprint notes them.
+10. Preserve spacing values exactly as given.
+11. Preserve alignment exactly as given.
+12. Preserve indentation exactly as given.
+13. Preserve named styles referenced in the blueprint.
+14. Preserve run-level formatting (bold/italic/underline substrings).
+15. Preserve font colors exactly as given (hex values from the blueprint).
+16. Preserve font sizes and font names exactly as given.
+17. Preserve table structures (column widths, border color/weight).
 
 ==================================================================
-BLUEPRINT RELIABILITY
+BLUEPRINT RELIABILITY & CONTENT INTEGRITY
 ==================================================================
 
-The blueprint is ~90% reference material, not gospel. Use it as-is
-by default — but the remaining ~10% is where YOUR OWN JUDGMENT about
-what a real, professional document should look like takes over. You
-are not a data-copying machine. You are the final authority on
-whether this document looks like something a court, client, or
-employer would accept without embarrassment.
+1. CONTENT IS MANDATORY: All text content, table rows, and structural elements from the blueprint must be preserved 100% without exception. You are NOT allowed to omit or summarize any text.
+2. VISUAL LAYOUT ADJUSTMENT: Your professional judgment applies ONLY to fixing visual layout calculations (e.g., column width math, line spacing rule conversions, font size overflow adjustments).
+3. NEVER delete real text or skip table rows to fix a formatting issue.
+4. If verbatim text contains embedded literal "\\n" sequences, split on "\\n" and render each line as its own Paragraph so text flows cleanly. NEVER drop lines.
 
-Apply your own judgment whenever you see:
-1. A table with `is_likely_layout_table: true` — this is NOT a real
-   table, it is text that was justified left/right and misread as a
-   table by conversion. Render it as plain aligned text (tab stops or
-   two TextRuns with spacing) with NO borders. If you keep it as a
-   Table for any reason, every cell border MUST be explicitly set to
-   "none" on all four sides — never let it default to a visible box.
-2. A run's `text` containing embedded "\\n" characters — this means
-   multiple original lines got flattened into one string. Split on
-   "\\n" and render each piece as its own bullet Paragraph (if it
-   starts with "•") or its own Paragraph with a line break, matching
-   how the rest of that section's bullets are formatted. NEVER print
-   a raw "\\n" character or let lines run together as one paragraph.
-3. Formatting values that are clearly broken — overflow, zero/
-   negative size, wild mismatch with sibling blocks. Recompute a
-   sane value; do not copy the broken one.
-4. Empty leftover paragraphs or spacing blocks that add no content or
-   visual value (common PDF-conversion artifacts) — drop them.
-
-When the blueprint and good professional-document judgment disagree
-on this ~10%, judgment wins. Never delete real content to fix a
-formatting issue, and never comment on a fix in the output — just
-produce the correct, clean, court-ready result.
+When generating DOCX.js code, produce the complete, 100% comprehensive, court-ready document with zero missing sections or omitted rows.
 
 ==================================================================
 OVERFLOW & SIZE ADJUSTMENT RULES
 ==================================================================
 
-1. When injecting case data, the text length may vary and could be significantly longer than the original template text.
-2. If you expect that the injected case data values will cause a table cell, column, or paragraph to overflow or look cluttered, you must intelligently adjust layout sizes:
-   - Slightly reduce font sizes (e.g. from 12pt to 10pt or 11pt) to fit the text.
-   - Adjust table column widths to allocate more space for longer content.
-   - Decrease paragraph spacing (`before`, `after`) or line spacing to keep content within page boundaries.
-3. All elements (including tables, cells, paragraphs, and lists) must strictly fit inside the document margins and page dimensions. They must not overflow or extend outside the printable area of the document.
-4. Ensure the total width of all columns in any table does not exceed the printable page width (Page Width - Left Margin - Right Margin).
+1. When injecting case data, text length may vary and could be
+   significantly longer than the original template text.
+2. If injected case data values will cause a table cell, column, or
+   paragraph to overflow or look cluttered, intelligently adjust:
+   - Slightly reduce font sizes to fit the text.
+   - Adjust table column widths to allocate more space for longer
+     content.
+   - Decrease paragraph/line spacing to keep content within bounds.
+3. All elements must strictly fit inside the document margins and
+   page dimensions given in the blueprint's Page Setup section.
+4. Ensure the total width of all table columns never exceeds the
+   printable page width (Page Width - Left Margin - Right Margin).
 
 ==================================================================
 DOCX.JS API RULES  (READ EVERY RULE — VIOLATIONS CAUSE RUNTIME ERRORS)
@@ -199,26 +230,8 @@ HEADER & FOOTER RULES  ← MOST COMMON SOURCE OF ERRORS
 ------------------------------------------------------
 5. Header functions MUST return a `new Header({{ children: [...] }})`.
    NEVER return a bare `Paragraph` or array from a header function.
-   CORRECT:
-     export function build_section_header() {{
-       return new Header({{ children: [new Paragraph({{ ... }})] }});
-     }}
-   WRONG (causes "Cannot read properties of undefined"):
-     export function build_section_header() {{
-       return new Paragraph({{ ... }});   // ← FORBIDDEN
-     }}
-
 6. Footer functions MUST return a `new Footer({{ children: [...] }})`.
    NEVER return a bare `Paragraph` or array from a footer function.
-   CORRECT:
-     export function build_section_footer() {{
-       return new Footer({{ children: [new Paragraph({{ ... }})] }});
-     }}
-   WRONG:
-     export function build_section_footer() {{
-       return new Paragraph({{ ... }});   // ← FORBIDDEN
-     }}
-
 7. When assigning headers/footers in a Document section, always use
    the result of the header/footer function directly:
      headers: {{ default: build_section_header() }}
@@ -229,18 +242,12 @@ PARAGRAPH RULES
 ---------------
 8. Every Paragraph must use the object-form constructor:
      new Paragraph({{ children: [...], ...options }})
-   NEVER use the deprecated string-form:
-     new Paragraph("text")   // ← FORBIDDEN — causes runtime errors
-
-9. Text content goes inside `TextRun` objects within `children`:
-     new Paragraph({{
-       children: [new TextRun({{ text: "Hello", bold: true }})]
-     }})
-
+   NEVER use the deprecated string-form: new Paragraph("text").
+9. Text content goes inside `TextRun` objects within `children`.
 10. `Paragraph` accepts these top-level options (not inside children):
-    - alignment, heading, spacing, indent, style, border, shading,
-      pageBreakBefore, keepNext, keepLines, outlineLevel, numbering,
-      tabStops, thematicBreak, contextualSpacing.
+    alignment, heading, spacing, indent, style, border, shading,
+    pageBreakBefore, keepNext, keepLines, outlineLevel, numbering,
+    tabStops, thematicBreak, contextualSpacing.
 
 TEXTRUN RULES
 -------------
@@ -248,95 +255,59 @@ TEXTRUN RULES
     color, size, font, highlight, allCaps, smallCaps, break,
     characterSpacing, vanish, specVanish, emphasisMark, language,
     superScript, subScript.
-12. `size` is in half-points (e.g., 24 = 12pt, 28 = 14pt).
-13. `color` is a 6-digit hex string WITHOUT the "#" prefix:
-    CORRECT: color: "FF0000"   WRONG: color: "#FF0000"
+12. `size` is in half-points (e.g., 24 = 12pt, 28 = 14pt). If the
+    blueprint gives a size directly in points, multiply by 2 before
+    writing it as `size`.
+13. `color` is a 6-digit hex string WITHOUT the "#" prefix. If the
+    blueprint gives a color with a leading "#", strip it.
 
 TABLE RULES
 -----------
-14. Table structure:
-      new Table({{
-        rows: [
-          new TableRow({{
-            children: [
-              new TableCell({{ children: [new Paragraph({{ children: [] }})] }}),
-            ]
-          }})
-        ]
-      }})
-15. Every TableCell MUST have at least one Paragraph in its children.
-    An empty TableCell MUST still contain: children: [new Paragraph({{}})]
+14. Table structure uses TableRow/TableCell with Paragraph children.
+15. Every TableCell MUST have at least one Paragraph, even if empty:
+    children: [new Paragraph({{}})].
 16. Width of columns uses WidthType:
       width: {{ size: 50, type: WidthType.PERCENTAGE }}
       width: {{ size: convertInchesToTwip(2), type: WidthType.DXA }}
 
 DOCUMENT / SECTION RULES
 --------------------------
-17. Document sections are defined as an array under the `sections` key:
-      new Document({{
-        sections: [
-          {{
-            properties: {{ ... }},
-            headers: {{ default: build_section_1_header() }},
-            footers: {{ default: build_section_1_footer() }},
-            children: [ ...build_01_group(), ...build_02_group() ]
-          }}
-        ]
-      }})
+17. Document sections are defined as an array under the `sections`
+    key, each with properties/headers/footers/children.
 18. `children` in a section is a flat array of Paragraph and Table
-    objects — never nested arrays. Spread group function results if they
-    return arrays: `...build_02_group()`.
-19. Section `properties` for page size/margins:
-      The blueprint/config specifies the page width, height, and margins directly in Twips. Write these values directly in the generated JavaScript code as numbers. Do NOT wrap them in `convertInchesToTwip()` since they are already in Twips.
-      Example:
-        properties: {{
-          page: {{
-            margin: {{
-              top: 1440,
-              bottom: 1440,
-              left: 1800,
-              right: 1800,
-            }},
-            size: {{
-              width: 12240,
-              height: 15840,
-            }}
-          }}
-        }}
+    objects — never nested arrays. Spread group function results:
+    `...build_01_claimants_list_block()`.
+19. Section `properties` for page size/margins: the blueprint
+    specifies page width, height, and margins directly in Twips.
+    Write these values directly as numbers — do NOT wrap them in
+    convertInchesToTwip() since they are already in Twips.
 
 SPACING RULES
 -------------
-20. Paragraph spacing and indents use twips. The blueprint/config specifies spacing (before, after) and indents (left, right, etc.) directly in Twips. Write these values directly as numbers. Do NOT multiply them by 20 or wrap them in convertInchesToTwip since they are already in Twips.
-      Example:
-        spacing: {{ before: 240, after: 120, line: 240, lineRule: "auto" }}
-
-21. line_spacing in the blueprint is an object, not a bare number:
-      {{ "value": 1.15, "unit": "multiplier", "rule": "MULTIPLE" }}
-      or
-      {{ "value": 360, "unit": "twips", "rule": "EXACTLY" }}
-    Convert it based on unit — never write line_spacing.value directly
-    into docx.js without this conversion:
-      - unit == "multiplier": line = round(value * 240), lineRule: "auto"
-      - unit == "twips": line = value, lineRule: "exact" (rule EXACTLY)
-        or lineRule: "atLeast" (rule AT_LEAST)
-    Example, multiplier 1.15:
-      spacing: {{ line: 276, lineRule: "auto" }}
-    Example, twips 360 with rule EXACTLY:
-      spacing: {{ line: 360, lineRule: "exact" }}
+20. Paragraph spacing and indents from the blueprint are already in
+    Twips (or in points — check the stated unit). Write Twips values
+    directly as numbers. If a value is stated in points, convert to
+    twips by multiplying by 20 before writing it.
+21. Line spacing in the blueprint may be stated as a multiplier
+    (e.g. "1.8×") or as an exact twips value (e.g. "276 twips
+    exactly"). Convert as follows — never write the raw stated number
+    directly into docx.js without this conversion:
+      - multiplier: line = round(value * 240), lineRule: "auto"
+      - exact twips: line = value, lineRule: "exact"
     Getting this conversion wrong causes paragraphs to collapse and
     visually overlap with the line below — treat this rule as strict.
 
 GENERAL RULES
 -------------
-21. Use DOCX.js constructs only — no DOM, no Node.js fs, no Buffer.
-22. Generate valid JavaScript — all brackets, braces, and parentheses
+22. Use DOCX.js constructs only — no DOM, no Node.js fs, no Buffer.
+23. Generate valid JavaScript — all brackets, braces, and parentheses
     must be balanced.
-23. Generate production-ready code with no TODO comments or stubs.
-24. Export every generated function with the `export` keyword.
-25. Avoid duplicate code — extract shared styles/options to const
+24. Generate production-ready code with no TODO comments or stubs.
+25. Export every generated function with the `export` keyword.
+26. Avoid duplicate code — extract shared styles/options to const
     variables at the top of the file.
-26. Avoid circular dependencies between functions.
-27. Ensure functions are self-contained and independently callable.
+27. Avoid circular dependencies between functions.
+28. Ensure functions are self-contained and independently callable.
 
 ==================================================================
 ASSEMBLY RULES
@@ -348,31 +319,24 @@ export function buildDocument()
 
 This function must:
 
-1. Create document sections.
+1. Create document sections matching the blueprint's Page Setup
+   groupings.
 2. Call all generated functions, each with no arguments.
 3. Preserve execution order — sections and groups in blueprint order.
 4. Preserve section ordering.
 5. Preserve header/footer ordering.
-6. Return a complete DOCX.js document.
-7. Return:
-
-   new Document({{ sections: [ ... ] }})
-
-8. headers and footers in each section object MUST use the wrapper
-   objects returned by build_..._header() and build_..._footer().
-   Example:
-     {{
-       headers: {{ default: build_section_1_header() }},
-       footers: {{ default: build_section_1_footer() }},
-       children: [ ...build_01_group(), ...build_02_group() ]
-     }}
-9. The returned Document must be directly executable without
+6. Return a complete DOCX.js document:
+     new Document({{ sections: [ ... ] }})
+7. headers and footers in each section object MUST use the wrapper
+   objects returned by build_section_header() and
+   build_section_footer().
+8. The returned Document must be directly executable without
    modification — it must produce a valid .docx file when passed to
    Packer.toBuffer().
-10. The returned Document must support DOCX export.
-11. The returned Document must support real-time preview rendering.
-12. buildDocument itself takes no parameters — every value it needs
+9. The returned Document must support real-time preview rendering.
+10. buildDocument itself takes no parameters — every value it needs
     is already fully resolved inside the functions it calls.
+
 ==================================================================
 VALIDATION RULES
 ==================================================================
@@ -380,17 +344,17 @@ VALIDATION RULES
 The generated code MUST:
 
 1. Compile successfully.
-2. Execute without syntax errors.
-3. Execute without runtime errors.
-4. Be importable.
-5. Be exportable.
-6. Be production ready.
-7. Support future insertion of additional semantic groups.
-8. Support future insertion of additional sections.
-9. Contain zero functions (including buildDocument) that declare or
+2. Execute without syntax or runtime errors.
+3. Be importable and exportable.
+4. Be production ready.
+5. Support future insertion of additional semantic sections.
+6. Contain zero functions (including buildDocument) that declare or
    accept any parameters.
-10. Contain zero references to caseData or any other external/data
-    variable — every value must already be a resolved literal.
+7. Contain zero references to caseData or any other external/data
+   variable — every value must already be a resolved literal.
+8. Reproduce every section named in the blueprint — no section may be
+   silently skipped, including repeating header/footer resolution
+   for every occurrence noted as "(same as Section N)".
 
 ==================================================================
 OUTPUT RULES

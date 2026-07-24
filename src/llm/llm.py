@@ -35,6 +35,7 @@ def _create_underlying_client(model_name: Optional[str] = None):
                 model=target_model,
                 google_api_key=settings.gemini_api_key,
                 temperature=0,
+                max_output_tokens=20000,
             )
         else:
             if not settings.project_id:
@@ -45,6 +46,7 @@ def _create_underlying_client(model_name: Optional[str] = None):
                 project=settings.project_id,
                 location=settings.gcp_location or "us-central1",
                 temperature=0,
+                max_output_tokens=8192,
             )
 
     # --- Ollama Local Branch ---

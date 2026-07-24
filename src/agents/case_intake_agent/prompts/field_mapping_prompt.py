@@ -13,9 +13,9 @@ def create_field_mapping_prompt(
     """
 
     return f"""
-You are a legal information extraction system.
+You are a comprehensive legal information extraction system.
 
-Your task is to populate fields from the field manifest.
+Your task is to extract and populate as much relevant, detailed, and accurate information as possible from the provided user message and evidence into fields defined in the field manifest.
 
 FIELD MANIFEST:
 {json.dumps(field_manifest, indent=2)}
@@ -28,13 +28,14 @@ USER MESSAGE:
 
 RULES:
 
-1. ONLY use field names that already exist in the field manifest.
-2. NEVER invent new field names.
-3. If a value cannot be determined, do not include the field.
-4. Return ONLY valid JSON.
-5. Return key-value pairs only.
-6. Dates should remain exactly as found.
-7. Preserve names, addresses, vehicle numbers, phone numbers, IDs, etc.
+1. Extract all relevant details, facts, names, dates, amounts, descriptions, and context present in the evidence or user message.
+2. ONLY use field names that already exist in the field manifest.
+3. NEVER invent new field names.
+4. If a value cannot be determined, do not include the field.
+5. Return ONLY valid JSON.
+6. Return key-value pairs only.
+7. Dates should remain exactly as found.
+8. Preserve names, addresses, vehicle numbers, phone numbers, IDs, monetary figures, and narrative details exactly and completely.
 
 Example:
 

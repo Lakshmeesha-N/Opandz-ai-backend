@@ -60,9 +60,27 @@ def initialize_firebase():
     return firebase_admin.initialize_app(cred, options)
 
 
+class _MockDocumentSnapshot:
+    def __init__(self, path: Path):
+        self.path = path
+        self.exists = path.exists()
+
+    def to_dict(self) -> dict:
+        if not self.exists:
+            return {}
+        try:
+            with open(self.path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+
 class _MockDocument:
     def __init__(self, path: Path):
         self.path = path
+
+    def get(self):
+        return _MockDocumentSnapshot(self.path)
 
     def set(self, data: Any, merge: bool = False, **kwargs):
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -87,7 +105,6 @@ class _MockDocument:
             
         with open(self.path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False, default=custom_serializer)
-
 
     def update(self, data: dict):
         if self.path.exists():
