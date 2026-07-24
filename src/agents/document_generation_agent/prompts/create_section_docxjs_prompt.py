@@ -63,6 +63,10 @@ CRITICAL ROLE DIRECTIVE (60% BLUEPRINT REFERENCE / 40% EXPERT KNOWLEDGE):
 5. DOCX.JS API NAMES (MANDATORY — use EXACTLY these):
    - Alignment MUST be `AlignmentType.CENTER`, `AlignmentType.LEFT`, `AlignmentType.RIGHT`, `AlignmentType.BOTH`.
      NEVER use `Alignment.CENTER` or `Alignment.LEFT` — those do NOT exist.
+   - Line rule MUST be `LineRuleType.MULTIPLE`, `LineRuleType.EXACT`, `LineRuleType.AT_LEAST`.
+     NEVER use `LineRule.MULTIPLE` — `LineRule` does NOT exist in `docx`.
+   - Height rule MUST be `HeightRuleType.EXACT`, `HeightRuleType.AT_LEAST`.
+     NEVER use `HeightRule.EXACT` — `HeightRule` does NOT exist in `docx`.
    - Table cell width: `WidthType.DXA` (not `WidthType.TWIPS`)
    - Border style: `BorderStyle.SINGLE`, `BorderStyle.NONE` etc.
    - Underline: `UnderlineType.SINGLE`

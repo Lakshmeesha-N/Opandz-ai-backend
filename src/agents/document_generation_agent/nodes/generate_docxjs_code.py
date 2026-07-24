@@ -138,6 +138,10 @@ def _fix_api_names(code: str) -> str:
     import re
     # Alignment.X → AlignmentType.X  (Alignment is not exported from docx)
     code = re.sub(r'\bAlignment\.(?!Type)', 'AlignmentType.', code)
+    # LineRule.X → LineRuleType.X  (LineRule is not exported from docx; it is LineRuleType)
+    code = re.sub(r'\bLineRule\.(?!Type)', 'LineRuleType.', code)
+    # HeightRule.X → HeightRuleType.X
+    code = re.sub(r'\bHeightRule\.(?!Type)', 'HeightRuleType.', code)
     # WidthType.TWIPS → WidthType.DXA
     code = code.replace('WidthType.TWIPS', 'WidthType.DXA')
     # Remove inline const CASE_DATA = {...} blocks that bloat the output
