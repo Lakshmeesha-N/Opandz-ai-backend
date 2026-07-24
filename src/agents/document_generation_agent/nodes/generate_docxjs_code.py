@@ -136,15 +136,28 @@ async def _generate_section_fn(
 def _fix_api_names(code: str) -> str:
     """Post-process generated code to fix common DOCX.js API name mistakes."""
     import re
-    # Alignment.X → AlignmentType.X  (Alignment is not exported from docx)
-    code = re.sub(r'\bAlignment\.(?!Type)', 'AlignmentType.', code)
-    # LineRule.X → LineRuleType.X  (LineRule is not exported from docx; it is LineRuleType)
-    code = re.sub(r'\bLineRule\.(?!Type)', 'LineRuleType.', code)
-    # HeightRule.X → HeightRuleType.X
-    code = re.sub(r'\bHeightRule\.(?!Type)', 'HeightRuleType.', code)
+
+    # Normalize HeightRule / HeightRuleType enums to clean string literals ("exact", "atLeast", "auto")
+    code = re.sub(r'\bHeightRule(?:Type)?\.EXACT(?:LY)?\b', '"exact"', code, flags=re.IGNORECASE)
+    code = re.sub(r'\bHeightRule(?:Type)?\.AT_LEAST\b', '"atLeast"', code, flags=re.IGNORECASE)
+    code = re.sub(r'\bHeightRule(?:Type)?\.AUTO\b', '"auto"', code, flags=re.IGNORECASE)
+
+    # Normalize LineRule / LineRuleType enums to clean string literals ("multiple", "exact", "atLeast")
+    code = re.sub(r'\bLineRule(?:Type)?\.MULTIPLE\b', '"multiple"', code, flags=re.IGNORECASE)
+    code = re.sub(r'\bLineRule(?:Type)?\.EXACT(?:LY)?\b', '"exact"', code, flags=re.IGNORECASE)
+    code = re.sub(r'\bLineRule(?:Type)?\.AT_LEAST\b', '"atLeast"', code, flags=re.IGNORECASE)
+
+    # Normalize Alignment / AlignmentType enums to clean string literals ("center", "left", "right", "both")
+    code = re.sub(r'\bAlignment(?:Type)?\.CENTER\b', '"center"', code, flags=re.IGNORECASE)
+    code = re.sub(r'\bAlignment(?:Type)?\.LEFT\b', '"left"', code, flags=re.IGNORECASE)
+    code = re.sub(r'\bAlignment(?:Type)?\.RIGHT\b', '"right"', code, flags=re.IGNORECASE)
+    code = re.sub(r'\bAlignment(?:Type)?\.JUSTIFY\b', '"both"', code, flags=re.IGNORECASE)
+    code = re.sub(r'\bAlignment(?:Type)?\.BOTH\b', '"both"', code, flags=re.IGNORECASE)
+
     # WidthType.TWIPS → WidthType.DXA
     code = code.replace('WidthType.TWIPS', 'WidthType.DXA')
-    # Remove inline const CASE_DATA = {...} blocks that bloat the output
+
+    # Remove inline const CASE_DATA = {...} blocks that bloat output
     code = re.sub(
         r'\n\s*const CASE_DATA\s*=\s*\{[^}]*(?:\{[^}]*\}[^}]*)?\};\s*\n',
         '\n',
