@@ -45,8 +45,14 @@ Return value  : {return_type_hint}
 {extra_rule}
 
 ==================================================================
-RULES
+RULES & PROFESSIONAL QUALITY MANDATE
 ==================================================================
+
+CRITICAL ROLE DIRECTIVE (60% BLUEPRINT REFERENCE / 40% EXPERT KNOWLEDGE):
+- The Blueprint below provides approximately 60% structural reference.
+- The remaining 40% MUST come from your expertise as a MASTER DOCUMENT WRITER and DOCX.JS ARCHITECT.
+- The output document MUST look 100% professional, elegant, and unbroken. It should NOT look broken or visually distorted.
+- If any formatting, column width, line height, table padding, or alignment in the blueprint is missing, broken, or ambiguous, it is YOUR DIRECT RESPONSIBILITY to apply expert document design standards to fix and refine it.
 
 1. Output ONLY the single export function — no imports, no other functions.
 2. Every piece of text in ORIGINAL CONTENT below must appear verbatim.

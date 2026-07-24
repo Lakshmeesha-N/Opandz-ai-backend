@@ -10,7 +10,13 @@ def create_docxjs_generation_prompt(
 ) -> str:
 
     return f"""
-You are an expert DOCX.js engineer and document rendering architect.
+You are an expert DOCX.js engineer and master document rendering architect.
+
+CRITICAL ROLE DIRECTIVE (60% BLUEPRINT REFERENCE / 40% EXPERT KNOWLEDGE):
+- The Blueprint below provides approximately 60% structural reference.
+- The remaining 40% MUST come from your expertise as a MASTER DOCUMENT WRITER and DOCX.JS ARCHITECT.
+- The output document MUST look 100% professional, court-ready, elegant, and unbroken. It should NOT look broken or visually distorted.
+- If any formatting, column width, line height, table padding, or alignment in the blueprint is missing, broken, or ambiguous, it is YOUR DIRECT RESPONSIBILITY to apply expert document design standards to fix and refine it.
 
 Your task is to generate production-ready DOCX.js code from the provided blueprint and case data.
 
