@@ -29,7 +29,8 @@ DOCXJS_IMPORTS = """import {
   Table, TableRow, TableCell, WidthType, AlignmentType,
   HeadingLevel, BorderStyle, ShadingType, PageOrientation,
   convertInchesToTwip, LevelFormat, UnderlineType,
-  SectionType, PageNumber, NumberFormat,
+  SectionType, PageNumber, NumberFormat, LineRule, HeightRule,
+  VerticalAlign, TabStopType, TabStopLeader,
 } from "docx";
 """
 
