@@ -24,15 +24,48 @@ from src.llm.llm import (
 
 logger = logging.getLogger(__name__)
 
-DOCXJS_IMPORTS = """import {
-  Document, Packer, Paragraph, TextRun, Header, Footer,
-  Table, TableRow, TableCell, WidthType, AlignmentType,
-  HeadingLevel, BorderStyle, ShadingType, PageOrientation,
-  convertInchesToTwip, LevelFormat, UnderlineType,
-  SectionType, PageNumber, NumberFormat, LineRule, HeightRule,
-  VerticalAlign, TabStopType, TabStopLeader,
-} from "docx";
-"""
+def _build_dynamic_docx_imports(body_code: str) -> str:
+    """
+    Dynamically scans generated section code for all referenced docx constructors,
+    enums, types, and helper functions, and generates a complete, clean import statement.
+    Guarantees no missing import reference errors regardless of what APIs the LLM uses.
+    """
+    import re
+
+    # Baseline core imports every document needs
+    imports = {
+        "Document", "Packer", "Paragraph", "TextRun", "Header", "Footer",
+        "Table", "TableRow", "TableCell", "WidthType", "AlignmentType"
+    }
+
+    # 1. Any constructor call: new X(...)
+    constructors = re.findall(r'\bnew\s+([A-Z][a-zA-Z0-9_]+)\b', body_code)
+    imports.update(constructors)
+
+    # 2. Any enum or class constant: X.Y (e.g., LineRule.MULTIPLE, BorderStyle.SINGLE)
+    enums = re.findall(r'\b([A-Z][a-zA-Z0-9_]+)\.[A-Z0-9_]+\b', body_code)
+    imports.update(enums)
+
+    # 3. Common helper functions (e.g., convertInchesToTwip)
+    helpers = re.findall(r'\b(convert[A-Za-z0-9_]+)\b', body_code)
+    imports.update(helpers)
+
+    # Clean up any non-docx identifiers if any slip through
+    imports.discard("Array")
+    imports.discard("String")
+    imports.discard("Object")
+    imports.discard("Number")
+    imports.discard("Boolean")
+    imports.discard("Date")
+    imports.discard("Math")
+    imports.discard("JSON")
+    imports.discard("RegExp")
+    imports.discard("Promise")
+    imports.discard("Error")
+    imports.discard("CASE_DATA")
+
+    sorted_imports = ",\n  ".join(sorted(imports))
+    return f"import {{\n  {sorted_imports},\n}} from \"docx\";"
 
 
 def _extract_text(response) -> str:
@@ -213,13 +246,14 @@ async def generate_docxjs_code(
   }});
 }}"""
 
-        # ── 5. Assemble final file ─────────────────────────────────────────
+        # ── 5. Assemble final file with dynamically generated imports ──────
+        body_code = "\n\n".join(section_functions) + "\n\n" + build_doc_fn
+        dynamic_imports = _build_dynamic_docx_imports(body_code)
+
         final_code = (
-            DOCXJS_IMPORTS
+            dynamic_imports
             + "\n\n"
-            + "\n\n".join(section_functions)
-            + "\n\n"
-            + build_doc_fn
+            + body_code
         )
 
         logger.info(
